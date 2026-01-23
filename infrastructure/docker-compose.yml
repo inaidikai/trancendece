@@ -1,0 +1,30 @@
+services:
+  auth-service:
+    build: ../backend/auth-service
+    expose:
+      - "8000"
+
+  user-service:
+    build: ../backend/user-service
+    expose:
+      - "8001"
+
+  diary-service:
+    build: ../backend/diary-service
+    expose:
+      - "8002"
+
+  realtime-service:
+    build: ../backend/realtime-service
+    expose:
+      - "8003"
+
+  api-gateway:
+    build: ../backend/api-gateway
+    ports:
+    - "8080:8080"  # Maps container port 8080 to host 8080
+    depends_on:
+      - auth-service
+      - user-service
+      - diary-service
+      - realtime-service
