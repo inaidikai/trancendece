@@ -31,8 +31,8 @@ const AnimalModel = React.forwardRef(function AnimalModel(props, ref) {
     <primitive
       ref={ref}
       object={scene}
-      scale={0.8}
-      position={[0, 0, 1]}
+      scale={0.4}
+      position={[0, -0.7, 1]}
     />
   );
 });
@@ -135,10 +135,10 @@ function Player({ onTick }) {
     const p = body.current.translation();
 
     // TUNE THESE:
-    const behindDist = 6.5;
-    const behindH = 2.1;
-    const frontDist = 4.8;   // bring this DOWN if too far
-    const frontH = 2.0;
+    const behindDist = 4.5;
+    const behindH = 0.8;
+    const frontDist = 2.4;   // bring this DOWN if too far
+    const frontH = 0.95;
 
     const dist = frontMode.current ? frontDist : behindDist;
     const h = frontMode.current ? frontH : behindH;
@@ -148,10 +148,12 @@ function Player({ onTick }) {
 
     desiredCameraPos.set(p.x + camOffset.x, p.y + h, p.z + camOffset.z);
 
-    camera.position.lerp(desiredCameraPos, frontMode.current ? 0.08 : 0.14);
+    camera.position.lerp(desiredCameraPos, frontMode.current ? 0.06 : 0.14);
 
     // look at player body center
-    camera.lookAt(p.x, p.y + 1.1, p.z);
+const lookY = frontMode.current ? -0.3 : 1.1;
+camera.lookAt(p.x, p.y + lookY, p.z);
+
 
     onTick?.(p, keys.current.e);
   });
@@ -183,7 +185,7 @@ function Player({ onTick }) {
     <RigidBody
       ref={body}
       colliders={false}
-      position={[0, -4, 4]}
+      position={[0, 1, 4]}
       enabledRotations={[false, false, false]}
     >
       <AnimalModel ref={modelRef} />
