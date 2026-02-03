@@ -5,7 +5,7 @@ services:
       - "8000"
 
   user-service:
-    build: ../backend/user-service
+    build: ../backend/user-service 
     expose:
       - "8001"
 
@@ -45,6 +45,8 @@ services:
       - user-service
       - diary-service
       - realtime-service
+    ports:
+      - "8080:8080"
     networks:
       - internal
 
@@ -65,3 +67,4 @@ services:
 networks:
   external:
   internal:
+

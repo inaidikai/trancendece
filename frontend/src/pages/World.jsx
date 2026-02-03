@@ -5,16 +5,37 @@ import { Physics, RigidBody, CapsuleCollider } from "@react-three/rapier";
 import { useNavigate } from "react-router-dom";
 import { Sky, Text, useGLTF, PointerLockControls } from "@react-three/drei";
 import { CuboidCollider } from "@react-three/rapier";
+import { useRapier } from "@react-three/rapier";
+import { useAnimations } from "@react-three/drei";
 
+import { Water } from "three-stdlib";
+import { useThree } from "@react-three/fiber";
 import * as THREE from "three";
+import { Environment } from "@react-three/drei";
+
+
+function lerpAngle(a, b, t) {
+  // shortest signed angular difference, in [-PI, PI]
+  const diff =
+    THREE.MathUtils.euclideanModulo(b - a + Math.PI, Math.PI * 2) - Math.PI;
+
+  return a + diff * t;
+}
 
 function useKeys() {
-  const keys = useRef({ w:false, a:false, s:false, d:false, e:false });
-
+  const keys = useRef({ w:false, a:false, s:false, d:false, e:false, space:false });
 
   useEffect(() => {
-    const down = (e) => (keys.current[e.key.toLowerCase()] = true);
-    const up = (e) => (keys.current[e.key.toLowerCase()] = false);
+    const down = (e) => {
+      const k = e.key.toLowerCase();
+      if (e.code === "Space") keys.current.space = true;
+      else keys.current[k] = true;
+    };
+    const up = (e) => {
+      const k = e.key.toLowerCase();
+      if (e.code === "Space") keys.current.space = false;
+      else keys.current[k] = false;
+    };
     window.addEventListener("keydown", down);
     window.addEventListener("keyup", up);
     return () => {
@@ -25,174 +46,269 @@ function useKeys() {
 
   return keys;
 }
-const AnimalModel = React.forwardRef(function AnimalModel(props, ref) {
-  const { scene } = useGLTF("/models/player.glb");
+
+const AnimalModel = React.forwardRef(function AnimalModel({ state }, ref) {
+  const group = useRef();
+  const { scene, animations } = useGLTF("/models/player.glb");
+  const { actions, names } = useAnimations(animations, group);
+
+  useEffect(() => {
+    if (!actions || !names?.length) return;
+
+    const idle = actions[names[0]];
+    const walk = actions[names[1]];
+
+    // fade switching
+    if (state === "walk" && walk) {
+      idle?.fadeOut(0.15);
+      walk.reset().fadeIn(0.15).play();
+    } else if (idle) {
+      walk?.fadeOut(0.15);
+      idle.reset().fadeIn(0.15).play();
+    }
+  }, [state, actions, names]);
+
   return (
-    <primitive
-      ref={ref}
-      object={scene}
-      scale={0.4}
-      position={[0, -0.7, 1]}
-    />
+    <group ref={group}>
+      <primitive ref={ref} object={scene} scale={0.35} position={[0, -0.72, 0]} />
+    </group>
   );
 });
 
+
 useGLTF.preload("/models/player.glb");
+
 function Player({ onTick }) {
+  const [animState, setAnimState] = useState("idle");
+  const respawnRequested = useRef(true); // true = spawn once on first frame
+  const BOUNDS = useMemo(() => ({ halfW: 10, halfD: 10 }), []);
   const body = useRef();
   const keys = useKeys();
+  const spawn = useMemo(() => ({ x: 8.75, y: 0.50, z: 2.28}), []);
+  const WATER_Y = -0.55; // should be close to your Water y
   const modelRef = useRef();
+  const { world, rapier } = useRapier();
+  const yawRef = useRef(0);
+  const needsRespawn = useRef(true);      // spawn at start + after falling
+const skipTurnFrames = useRef(0);       // stop rotation override for a frame
+const didInit = useRef(false);
 
-  // player heading (stable, used for camera + movement)
-  const playerYaw = useRef(0);
 
-  // camera yaw smoothly follows either behind or front of player
+const tmpDir = useMemo(() => new THREE.Vector3(), []);
+
+ 
+
+
+  // Camera angles controlled by mouse ALL THE TIME (while pointer locked)
   const camYaw = useRef(0);
-
-  // pitch just for slight up/down look (optional)
   const pitch = useRef(0);
 
-  // front/back state with idle delay
-  const frontMode = useRef(false);
-  const idleStart = useRef(null);
-
-  const modelYawOffset = useRef(Math.PI / 2); // tweak if model sideways
-
+  // Movement vectors
   const move = useMemo(() => new THREE.Vector3(), []);
+  const forward = useMemo(() => new THREE.Vector3(), []);
+  const right = useMemo(() => new THREE.Vector3(), []);
   const camOffset = useMemo(() => new THREE.Vector3(), []);
   const desiredCameraPos = useMemo(() => new THREE.Vector3(), []);
+  const upAxis = useMemo(() => new THREE.Vector3(0, 1, 0), []);
 
-  function lerpAngle(a, b, t) {
-    const diff = ((b - a + Math.PI) % (Math.PI * 2)) - Math.PI;
-    return a + diff * t;
+  // Jump debounce
+  const spaceWasDown = useRef(false);
+
+  // If your model faces sideways, keep your offset
+  const modelYawOffset = useRef(-Math.PI / 2);
+
+  const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
+
+  const doRespawn = (camera) => {
+  if (!body.current) return;
+
+  body.current.setTranslation(spawn, true);
+  body.current.setLinvel({ x: 0, y: 0, z: 0 }, true);
+  body.current.setAngvel({ x: 0, y: 0, z: 0 }, true);
+
+  // face same direction as camera (so player looks forward, not at camera)
+  yawRef.current = camYaw.current;
+
+  if (modelRef.current) {
+    modelRef.current.rotation.y = yawRef.current + modelYawOffset.current;
   }
 
+  skipTurnFrames.current = 4;  // IMPORTANT: give it a few frames
+  needsRespawn.current = false;
+};
+
+
+  function isGrounded(pos) {
+    // small ray down; tune if needed
+    const ray = new rapier.Ray(pos, { x: 0, y: -1, z: 0 });
+    const hit = world.castRay(ray, 0.55, true);
+    return !!hit;
+  }
+  
+useEffect(() => {
+  const onMouseMove = (e) => {
+    if (document.pointerLockElement == null) return;
+
+    const sens = 0.002;
+    camYaw.current -= e.movementX * sens;
+    pitch.current -= e.movementY * sens;
+
+    pitch.current = clamp(
+      pitch.current,
+      -Math.PI / 2 + 0.1,
+      Math.PI / 2 - 0.1
+    );
+  };
+
+  window.addEventListener("mousemove", onMouseMove);
+  return () => window.removeEventListener("mousemove", onMouseMove);
+}, []);
+
+
+const didInitFacing = useRef(false);
+
   useFrame(({ camera }) => {
+    // spawn/respawn in-frame (camera yaw exists here)
+    if (needsRespawn.current) {
+      doRespawn(camera);
+      return;
+    }
+
     if (!body.current) return;
 
-    const isMoveInput =
-      keys.current.w || keys.current.a || keys.current.s || keys.current.d;
 
-    // --- front/back switching ---
-    const now = performance.now();
-    if (isMoveInput) {
-      frontMode.current = false;
-      idleStart.current = null;
-    } else {
-      if (idleStart.current == null) idleStart.current = now;
-      if (now - idleStart.current > 200) frontMode.current = true;
-    }
+    if (!didInit.current) {
+      didInit.current = true;
+      // camera start angles (from your logs)
+      camYaw.current = -0.88;
+      pitch.current = 0.12;
+      // make the player face the camera on first impression
+      // (camera is behind player, so player should face opposite yaw)
+       yawRef.current = camYaw.current + Math.PI;
 
-    // --- build input move vector in LOCAL space (not camera space) ---
-    // W = forward (-z), S = back (+z), A = left (-x), D = right (+x)
-    move.set(0, 0, 0);
-    if (keys.current.w) move.z -= 1;
-    if (keys.current.s) move.z += 1;
-    if (keys.current.a) move.x -= 1;
-    if (keys.current.d) move.x += 1;
+       if (modelRef.current) {
+        modelRef.current.rotation.y =
+          yawRef.current + modelYawOffset.current;
+  }
+}
+    // --- movement input ---
+    const w = keys.current.w ? 1 : 0;
+    const s = keys.current.s ? 1 : 0;
+    const a = keys.current.a ? 1 : 0;
+    const d = keys.current.d ? 1 : 0;
 
-    // convert local move to world using playerYaw
-    if (move.lengthSq() > 0) {
-      move.normalize();
+    // camera forward/right vectors from camYaw (Y-axis rotation only)
+    // camera forward/right based on camYaw
+  forward.set(0, 0, 1).applyAxisAngle(upAxis, camYaw.current);
+  right.set(-1, 0, 0).applyAxisAngle(upAxis, camYaw.current);
 
-      // rotate move by playerYaw
-      const sin = Math.sin(playerYaw.current);
-      const cos = Math.cos(playerYaw.current);
+  move.set(0, 0, 0);
+  move.addScaledVector(forward, (w - s));
+  move.addScaledVector(right, (d - a));
 
-      const mx = move.x * cos - move.z * sin;
-      const mz = move.x * sin + move.z * cos;
 
-      // speed
-      const speed = 4;
-      move.set(mx * speed, 0, mz * speed);
-    }
+    const moving = move.lengthSq() > 0.0001;
+    if (moving) move.normalize();
 
-    // apply movement velocity
+    // apply speed
+    const speed = 4;
+    move.multiplyScalar(speed);
+
+    // keep existing vertical velocity
     const vel = body.current.linvel();
     body.current.setLinvel({ x: move.x, y: vel.y, z: move.z }, true);
 
-    // --- camera yaw target ---
-    // behind: same yaw as player
-    // front: player + PI
-    const targetCamYaw = frontMode.current
-      ? playerYaw.current + Math.PI
-      : playerYaw.current;
+    // --- jump ---
+    const spaceDown = keys.current.space;
+    const spacePressed = spaceDown && !spaceWasDown.current;
+    spaceWasDown.current = spaceDown;
 
-    // smooth camera yaw
-    camYaw.current = lerpAngle(camYaw.current, targetCamYaw, frontMode.current ? 0.06 : 0.10);
-
-    // camera rotation
-    camera.rotation.order = "YXZ";
-    camera.rotation.y = camYaw.current;
-    camera.rotation.x = pitch.current;
-
-    // --- rotate model to face playerYaw (NOT camera) ---
-    if (modelRef.current) {
-      modelRef.current.rotation.y = playerYaw.current + modelYawOffset.current;
-    }
-
-    // --- camera position (based on playerYaw, stable) ---
     const p = body.current.translation();
 
-    // TUNE THESE:
-    const behindDist = 4.5;
-    const behindH = 0.8;
-    const frontDist = 2.4;   // bring this DOWN if too far
-    const frontH = 0.95;
 
-    const dist = frontMode.current ? frontDist : behindDist;
-    const h = frontMode.current ? frontH : behindH;
+    const nextState = moving ? "walk" : "idle";
+    if (animState !== nextState) setAnimState(nextState);
 
-    // camera offset direction: from yaw (behind/front already handled by camYaw target)
-    camOffset.set(0, 0, dist).applyAxisAngle(new THREE.Vector3(0, 1, 0), camYaw.current);
 
-    desiredCameraPos.set(p.x + camOffset.x, p.y + h, p.z + camOffset.z);
+    if (p.y < -10) {
+  needsRespawn.current = true;
+  return;
+}
+// Option A: respawn if player leaves the playable rectangle
+const { halfW, halfD } = BOUNDS;
 
-    camera.position.lerp(desiredCameraPos, frontMode.current ? 0.06 : 0.14);
+if (p.x < -halfW || p.x > halfW || p.z < -halfD || p.z > halfD) {
+  needsRespawn.current = true;
+  return;
+}
 
-    // look at player body center
-const lookY = frontMode.current ? -0.3 : 1.1;
-camera.lookAt(p.x, p.y + lookY, p.z);
+    
+
+    if (spacePressed && isGrounded(p)) {
+      const jumpSpeed = 6.5;
+      const v = body.current.linvel();
+      body.current.setLinvel({ x: v.x, y: jumpSpeed, z: v.z }, true);
+    }
+
+
+
+// --- rotate player model to face movement direction (stay last dir when idle) ---
+
+if (modelRef.current) {
+  if (skipTurnFrames.current > 0) {
+    skipTurnFrames.current -= 1;
+  } else {
+    tmpDir.set(0, 0, 0);
+    tmpDir.addScaledVector(forward, (w - s));
+    tmpDir.addScaledVector(right, (d - a));
+
+    const isMoving = tmpDir.lengthSq() > 0.0001;
+
+    let targetYaw = yawRef.current; // keep last facing when idle
+    if (isMoving) {
+      tmpDir.normalize();
+      targetYaw = Math.atan2(tmpDir.x, tmpDir.z);
+    }
+
+    yawRef.current = lerpAngle(yawRef.current, targetYaw, 0.15);
+    modelRef.current.rotation.y = yawRef.current + modelYawOffset.current;
+  }
+}
+
+// --- third-person camera ---
+const dist = 3.2;
+const height = 1.0;
+
+camOffset.set(0, 0, -dist).applyAxisAngle(upAxis, camYaw.current);
+desiredCameraPos.set(p.x + camOffset.x, p.y + height, p.z + camOffset.z);
+
+camera.position.lerp(desiredCameraPos, 0.18);
+
+// Look target should include pitch by moving target up/down a bit
+const lookY = p.y + 0.35 + Math.sin(pitch.current) * 0.6;
+camera.lookAt(p.x, lookY, p.z);
+
 
 
     onTick?.(p, keys.current.e);
   });
 
-  // Mouse look ONLY while moving:
-  // Changes playerYaw (so player+camera heading changes together)
-  useEffect(() => {
-    const onMouseMove = (e) => {
-      if (document.pointerLockElement == null) return;
-
-      const isMoveInput =
-        keys.current.w || keys.current.a || keys.current.s || keys.current.d;
-
-      if (!isMoveInput) return; // don’t rotate when idle/front view
-
-      const sens = 0.0025;
-      playerYaw.current -= e.movementX * sens;
-
-      pitch.current -= e.movementY * sens;
-      const limit = Math.PI / 2 - 0.05;
-      pitch.current = Math.max(-limit, Math.min(limit, pitch.current));
-    };
-
-    window.addEventListener("mousemove", onMouseMove);
-    return () => window.removeEventListener("mousemove", onMouseMove);
-  }, []);
-
   return (
     <RigidBody
       ref={body}
       colliders={false}
-      position={[0, 1, 4]}
+      position={[8.75, 0.8, 2.28]}
       enabledRotations={[false, false, false]}
+      linearDamping={5}  // makes movement feel less slippery
+      angularDamping={10}
     >
-      <AnimalModel ref={modelRef} />
+<AnimalModel ref={modelRef} state={animState} />
       <CapsuleCollider args={[0.45, 0.35]} />
     </RigidBody>
   );
 }
+
+
 
 function Book({ pos, label }) {
   return (
@@ -222,37 +338,30 @@ function Plus({ pos }) {
   );
 }
 
-
 function BoundaryWalls() {
-  // Define an allowed zone centered at (0,0,0)
-  // half-extents: width=10, depth=10, wallHeight=3
   const halfW = 10;
   const halfD = 10;
-  const wallH = 3;
-  const t = 0.5; // wall thickness
+  const wallH = 3;        // real height
+  const t = 0.5;
+  const y = wallH / 2;    // center
 
   return (
     <RigidBody type="fixed">
-      {/* Left wall */}
-      <CuboidCollider args={[t, wallH, halfD]} position={[-halfW, wallH, 0]} />
-      {/* Right wall */}
-      <CuboidCollider args={[t, wallH, halfD]} position={[halfW, wallH, 0]} />
-
-      {/* Back wall */}
-      <CuboidCollider args={[halfW, wallH, t]} position={[0, wallH, -halfD]} />
-      {/* Front wall */}
-      <CuboidCollider args={[halfW, wallH, t]} position={[0, wallH, halfD]} />
+      <CuboidCollider args={[t, y, halfD]} position={[-halfW, y, 0]} />
+      <CuboidCollider args={[t, y, halfD]} position={[ halfW, y, 0]} />
+      <CuboidCollider args={[halfW, y, t]} position={[0, y, -halfD]} />
+      <CuboidCollider args={[halfW, y, t]} position={[0, y,  halfD]} />
     </RigidBody>
   );
 }
 
 
-function CoffeeShop({ position = [0, 0, 0], scale = 1 }) {
+function CoffeeShop({ position = [0, 0, 0], scale = 9 }) {
   const { scene } = useGLTF("/models/coffeeshop.glb");
 
   return (
-    <RigidBody type="fixed" colliders="trimesh">
-      <primitive object={scene} position={position} scale={scale} />
+    <RigidBody type="fixed" colliders="trimesh" position={position} scale={scale}>
+      <primitive object={scene} />
     </RigidBody>
   );
 }
@@ -260,6 +369,44 @@ function CoffeeShop({ position = [0, 0, 0], scale = 1 }) {
 
 // Preload so it pops in faster
 useGLTF.preload("/models/coffeeshop.glb");
+
+
+function Ocean({ y = -0.6, size = 600 }) {
+  const waterRef = useRef();
+  const { gl, scene } = useThree();
+
+  const water = useMemo(() => {
+    const geometry = new THREE.PlaneGeometry(size, size);
+
+    const w = new Water(geometry, {
+      textureWidth: 1024,
+      textureHeight: 1024,
+      waterNormals: new THREE.TextureLoader().load(
+        "https://threejs.org/examples/textures/waternormals.jpg",
+        (t) => {
+          t.wrapS = t.wrapT = THREE.RepeatWrapping;
+        }
+      ),
+      sunDirection: new THREE.Vector3(1, 1, 1),
+      sunColor: 0xffffff,
+      waterColor: 0x1e90ff,   // blue
+      distortionScale: 2.0,
+      fog: scene.fog !== undefined,
+    });
+
+    w.rotation.x = -Math.PI / 2;
+    w.position.y = y;
+
+    return w;
+  }, [scene, y, size]);
+
+  useFrame((_, delta) => {
+    water.material.uniforms.time.value += delta;
+  });
+
+  return <primitive ref={waterRef} object={water} />;
+}
+
 
 export default function World() {
   const nav = useNavigate();
@@ -313,23 +460,24 @@ export default function World() {
   return (
     <div style={{ height: "100dvh", width: "100vw" }}>
       <Canvas camera={{ fov: 50 }} style={{ height: "100%", width: "100%", display: "block" }}>
+          <Environment
+    files="/hdri/coffee_sky.hdr"
+    background
+    intensity={0.5}
+  />
+
   <ambientLight intensity={0.6} />
-  <directionalLight position={[5, 10, 5]} intensity={1.2} />
-  <Sky />
+  <directionalLight position={[5, 10, 5]} intensity={0.1} />
 
   <PointerLockControls />
 
   <Physics>
-    {/* Safety floor so you NEVER fall while testing */}
-    <RigidBody type="fixed" colliders={false}>
-      <CuboidCollider args={[50, 0.5, 50]} position={[0, -0.5, 0]} />
-    </RigidBody>
+
+      <Ocean y={-0.5} size={600}  />
+      <BoundaryWalls />
 
     {/* Coffee shop collision */}
     <CoffeeShop position={[0, -0.3, 0]} scale={1} />
-
-    {/* Invisible boundary box */}
-    <BoundaryWalls />
 
     {/* Interactive objects */}
     {books.map((b) => (
@@ -337,12 +485,18 @@ export default function World() {
     ))}
     <Plus pos={plus} />
 
+    <RigidBody type="fixed" colliders={false}>
+  <CuboidCollider args={[400, 0.5, 400]} position={[0, -1, 0]} />
+</RigidBody>
+
     {/* Player */}
     <Player onTick={tick} />
   </Physics>
 </Canvas>
 
-<div style={{
+<div 
+ onClick={() => document.body.requestPointerLock?.()}
+style={{
   position: "fixed",
   top: 12,
   left: 12,
@@ -392,5 +546,6 @@ export default function World() {
         WASD to move • E to interact
       </div>
     </div>
+
   );
 }
