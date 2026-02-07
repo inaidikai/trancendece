@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
 
 import { Physics, RigidBody, CapsuleCollider } from "@react-three/rapier";
@@ -22,29 +22,95 @@ function lerpAngle(a, b, t) {
   return a + diff * t;
 }
 
-function useKeys() {
-  const keys = useRef({ w:false, a:false, s:false, d:false, e:false, space:false });
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(false);
 
   useEffect(() => {
+    const mq = window.matchMedia?.("(pointer: coarse)");
+    const calc = () => {
+      const coarse = mq?.matches ?? false;
+      const uaMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+      setIsMobile(coarse || uaMobile);
+    };
+    calc();
+    mq?.addEventListener?.("change", calc);
+    window.addEventListener("resize", calc);
+    return () => {
+      mq?.removeEventListener?.("change", calc);
+      window.removeEventListener("resize", calc);
+    };
+  }, []);
+
+  return isMobile;
+}
+
+function useUnifiedInput(isMobile) {
+  const input = useRef({
+    moveX: 0,
+    moveY: 0,
+    jump: false,
+    interact: false,
+    sprint: false,
+    lookDX: 0,
+    lookDY: 0,
+  });
+
+  useEffect(() => {
+    if (isMobile) return;
+
     const down = (e) => {
-      const k = e.key.toLowerCase();
-      if (e.code === "Space") keys.current.space = true;
-      else keys.current[k] = true;
+      if (e.code === "Space") input.current.jump = true;
+      if (e.code === "KeyE") input.current.interact = true;
+      if (e.code === "ShiftLeft" || e.code === "ShiftRight") input.current.sprint = true;
+
+      if (e.code === "KeyW") input.current.moveY = -1;
+      if (e.code === "KeyS") input.current.moveY = 1;
+      if (e.code === "KeyA") input.current.moveX = -1;
+      if (e.code === "KeyD") input.current.moveX = 1;
     };
+
     const up = (e) => {
-      const k = e.key.toLowerCase();
-      if (e.code === "Space") keys.current.space = false;
-      else keys.current[k] = false;
+      if (e.code === "Space") input.current.jump = false;
+      if (e.code === "KeyE") input.current.interact = false;
+      if (e.code === "ShiftLeft" || e.code === "ShiftRight") input.current.sprint = false;
+
+      if (e.code === "KeyW" && input.current.moveY === -1) input.current.moveY = 0;
+      if (e.code === "KeyS" && input.current.moveY === 1) input.current.moveY = 0;
+      if (e.code === "KeyA" && input.current.moveX === -1) input.current.moveX = 0;
+      if (e.code === "KeyD" && input.current.moveX === 1) input.current.moveX = 0;
     };
+
     window.addEventListener("keydown", down);
     window.addEventListener("keyup", up);
     return () => {
       window.removeEventListener("keydown", down);
       window.removeEventListener("keyup", up);
     };
-  }, []);
+  }, [isMobile]);
 
-  return keys;
+  useEffect(() => {
+    if (isMobile) return;
+
+    const onMouseMove = (e) => {
+      if (document.pointerLockElement == null) return;
+      const sens = 0.002;
+      input.current.lookDX += -e.movementX * sens;
+      input.current.lookDY += -e.movementY * sens;
+    };
+
+    window.addEventListener("mousemove", onMouseMove);
+    return () => window.removeEventListener("mousemove", onMouseMove);
+  }, [isMobile]);
+
+  const consumeLook = () => {
+    const dx = input.current.lookDX;
+    const dy = input.current.lookDY;
+    input.current.lookDX = 0;
+    input.current.lookDY = 0;
+    return { dx, dy };
+  };
+
+  return { input, consumeLook };
 }
 
 const AnimalModel = React.forwardRef(function AnimalModel({ state }, ref) {
@@ -78,12 +144,11 @@ const AnimalModel = React.forwardRef(function AnimalModel({ state }, ref) {
 
 useGLTF.preload("/models/player.glb");
 
-function Player({ onTick }) {
+function Player({ onTick, inputRef, consumeLook }) {
   const [animState, setAnimState] = useState("idle");
   const respawnRequested = useRef(true); // true = spawn once on first frame
-  const BOUNDS = useMemo(() => ({ halfW: 10, halfD: 10 }), []);
+  const BOUNDS = useMemo(() => ({ halfW: 13, halfD: 13 }), []);
   const body = useRef();
-  const keys = useKeys();
   const spawn = useMemo(() => ({ x: 8.75, y: 0.50, z: 2.28}), []);
   const WATER_Y = -0.55; // should be close to your Water y
   const modelRef = useRef();
@@ -145,26 +210,6 @@ const tmpDir = useMemo(() => new THREE.Vector3(), []);
     return !!hit;
   }
   
-useEffect(() => {
-  const onMouseMove = (e) => {
-    if (document.pointerLockElement == null) return;
-
-    const sens = 0.002;
-    camYaw.current -= e.movementX * sens;
-    pitch.current -= e.movementY * sens;
-
-    pitch.current = clamp(
-      pitch.current,
-      -Math.PI / 2 + 0.1,
-      Math.PI / 2 - 0.1
-    );
-  };
-
-  window.addEventListener("mousemove", onMouseMove);
-  return () => window.removeEventListener("mousemove", onMouseMove);
-}, []);
-
-
 const didInitFacing = useRef(false);
 
   useFrame(({ camera }) => {
@@ -192,10 +237,23 @@ const didInitFacing = useRef(false);
   }
 }
     // --- movement input ---
-    const w = keys.current.w ? 1 : 0;
-    const s = keys.current.s ? 1 : 0;
-    const a = keys.current.a ? 1 : 0;
-    const d = keys.current.d ? 1 : 0;
+    const mx = inputRef.current.moveX;
+    const my = inputRef.current.moveY;
+
+    const w = my < 0 ? -my : 0;
+    const s = my > 0 ? my : 0;
+    const a = mx < 0 ? -mx : 0;
+    const d = mx > 0 ? mx : 0;
+
+    const { dx, dy } = consumeLook();
+    camYaw.current += dx;
+    pitch.current += dy;
+
+    pitch.current = clamp(
+      pitch.current,
+      -Math.PI / 2 + 0.1,
+      Math.PI / 2 - 0.1
+    );
 
     // camera forward/right vectors from camYaw (Y-axis rotation only)
     // camera forward/right based on camYaw
@@ -219,7 +277,7 @@ const didInitFacing = useRef(false);
     body.current.setLinvel({ x: move.x, y: vel.y, z: move.z }, true);
 
     // --- jump ---
-    const spaceDown = keys.current.space;
+    const spaceDown = inputRef.current.jump;
     const spacePressed = spaceDown && !spaceWasDown.current;
     spaceWasDown.current = spaceDown;
 
@@ -290,7 +348,7 @@ camera.lookAt(p.x, lookY, p.z);
 
 
 
-    onTick?.(p, keys.current.e);
+    onTick?.(p, inputRef.current.interact);
   });
 
   return (
@@ -308,39 +366,216 @@ camera.lookAt(p.x, lookY, p.z);
   );
 }
 
+function MobileControls({ inputRef, showInteract }) {
+  const joyId = useRef(null);
+  const joyCenter = useRef({ x: 0, y: 0 });
+  const [joyActive, setJoyActive] = useState(false);
+  const [joyOffset, setJoyOffset] = useState({ x: 0, y: 0 });
 
+  const lookId = useRef(null);
+  const lastLook = useRef({ x: 0, y: 0 });
+
+  useEffect(() => {
+    const prevent = (e) => e.preventDefault();
+    document.addEventListener("touchmove", prevent, { passive: false });
+    return () => document.removeEventListener("touchmove", prevent);
+  }, []);
+
+  const joyStart = (e) => {
+    const t = e.changedTouches[0];
+    joyId.current = t.identifier;
+    joyCenter.current = { x: t.clientX, y: t.clientY };
+    setJoyActive(true);
+    setJoyOffset({ x: 0, y: 0 });
+  };
+
+  const joyMove = (e) => {
+    if (joyId.current == null) return;
+    const t = [...e.touches].find((tt) => tt.identifier === joyId.current);
+    if (!t) return;
+
+    const dx = t.clientX - joyCenter.current.x;
+    const dy = t.clientY - joyCenter.current.y;
+
+    const max = 55;
+    const nx = Math.max(-1, Math.min(1, dx / max));
+    const ny = Math.max(-1, Math.min(1, dy / max));
+
+    inputRef.current.moveX = nx;
+    inputRef.current.moveY = ny;
+    setJoyOffset({ x: nx * 36, y: ny * 36 });
+  };
+
+  const joyEnd = (e) => {
+    if (joyId.current == null) return;
+    const ended = [...e.changedTouches].some((tt) => tt.identifier === joyId.current);
+    if (!ended) return;
+
+    joyId.current = null;
+    inputRef.current.moveX = 0;
+    inputRef.current.moveY = 0;
+    setJoyActive(false);
+    setJoyOffset({ x: 0, y: 0 });
+  };
+
+  const lookStart = (e) => {
+    const t = e.changedTouches[0];
+    lookId.current = t.identifier;
+    lastLook.current = { x: t.clientX, y: t.clientY };
+  };
+
+  const lookMove = (e) => {
+    if (lookId.current == null) return;
+    const t = [...e.touches].find((tt) => tt.identifier === lookId.current);
+    if (!t) return;
+
+    const dx = t.clientX - lastLook.current.x;
+    const dy = t.clientY - lastLook.current.y;
+    lastLook.current = { x: t.clientX, y: t.clientY };
+
+    const sens = 0.008;
+    inputRef.current.lookDX += dx * sens;
+    inputRef.current.lookDY += dy * sens;
+  };
+
+  const lookEnd = (e) => {
+    if (lookId.current == null) return;
+    const ended = [...e.changedTouches].some((tt) => tt.identifier === lookId.current);
+    if (!ended) return;
+    lookId.current = null;
+  };
+
+  return (
+    <div style={{ position: "fixed", inset: 0, pointerEvents: "none" }}>
+      <div
+        onTouchStart={joyStart}
+        onTouchMove={joyMove}
+        onTouchEnd={joyEnd}
+        style={{
+          position: "fixed",
+          left: 16,
+          bottom: 16,
+          width: 160,
+          height: 160,
+          borderRadius: 999,
+          background: "rgba(255,255,255,0.08)",
+          border: "1px solid rgba(255,255,255,0.14)",
+          pointerEvents: "auto",
+          touchAction: "none",
+        }}
+      >
+        <div
+          style={{
+            position: "absolute",
+            left: "50%",
+            top: "50%",
+            width: 44,
+            height: 44,
+            borderRadius: 999,
+            transform: `translate(-50%, -50%) translate(${joyOffset.x}px, ${joyOffset.y}px)`,
+            background: joyActive ? "rgba(255,255,255,0.35)" : "rgba(255,255,255,0.18)",
+            border: "1px solid rgba(255,255,255,0.35)",
+            boxShadow: joyActive ? "0 0 12px rgba(255,255,255,0.25)" : "none",
+            transition: joyActive ? "none" : "transform 120ms ease",
+          }}
+        />
+      </div>
+
+      <div
+        onTouchStart={lookStart}
+        onTouchMove={lookMove}
+        onTouchEnd={lookEnd}
+        style={{
+          position: "fixed",
+          right: 0,
+          top: 0,
+          width: "60vw",
+          height: "100vh",
+          pointerEvents: "auto",
+          touchAction: "none",
+        }}
+      />
+
+      <button
+        onTouchStart={() => (inputRef.current.jump = true)}
+        onTouchEnd={() => (inputRef.current.jump = false)}
+        style={{
+          position: "fixed",
+          right: 18,
+          bottom: 18,
+          width: 92,
+          height: 92,
+          borderRadius: 999,
+          background: "rgba(255,255,255,0.12)",
+          border: "1px solid rgba(255,255,255,0.18)",
+          color: "white",
+          fontSize: 16,
+          pointerEvents: "auto",
+        }}
+      >
+        Jump
+      </button>
+
+      {showInteract && (
+        <button
+          onTouchStart={() => (inputRef.current.interact = true)}
+          onTouchEnd={() => (inputRef.current.interact = false)}
+          style={{
+            position: "fixed",
+            left: "50%",
+            transform: "translateX(-50%)",
+            bottom: 24,
+            padding: "12px 18px",
+            borderRadius: 999,
+            background: "rgba(0,0,0,0.55)",
+            border: "1px solid rgba(255,255,255,0.18)",
+            color: "white",
+            fontSize: 14,
+            pointerEvents: "auto",
+          }}
+        >
+          Interact
+        </button>
+      )}
+    </div>
+  );
+}
 
 function Book({ pos, label }) {
+  const group = useRef();
+  const baseY = pos[1];
+  const { scene, animations } = useGLTF("/models/sailor_magical_book.glb");
+  const { actions, names } = useAnimations(animations, group);
+
+  useEffect(() => {
+    if (!actions || !names?.length) return;
+    const action = actions[names[0]];
+    action?.reset().fadeIn(0.2).play();
+    return () => action?.fadeOut(0.2);
+  }, [actions, names]);
+
+  useFrame((state) => {
+    if (!group.current) return;
+    const t = state.clock.getElapsedTime();
+    group.current.position.y = baseY + Math.sin(t * 1.5) * 0.08;
+    group.current.rotation.y = 0;
+  });
+
   return (
-    <group position={pos}>
-      <mesh>
-        <boxGeometry args={[0.6, 0.1, 0.4]} />
-        <meshStandardMaterial />
-      </mesh>
-      <Text fontSize={0.15} position={[0, 0.3, 0]}>
-        {label}
-      </Text>
+    <group ref={group} position={pos} scale={0.35}>
+      <group rotation={[-Math.PI/2, -3, 0]}>
+        <primitive object={scene} />
+      </group>
+
     </group>
   );
 }
 
-function Plus({ pos }) {
-  return (
-    <group position={pos}>
-      <mesh>
-        <boxGeometry args={[0.55, 0.55, 0.55]} />
-        <meshStandardMaterial />
-      </mesh>
-      <Text fontSize={0.25} position={[0, 0.8, 0]}>
-        +
-      </Text>
-    </group>
-  );
-}
+useGLTF.preload("/models/sailor_magical_book.glb");
 
 function BoundaryWalls() {
-  const halfW = 10;
-  const halfD = 10;
+  const halfW = 13;
+  const halfD = 13;
   const wallH = 3;        // real height
   const t = 0.5;
   const y = wallH / 2;    // center
@@ -369,6 +604,33 @@ function CoffeeShop({ position = [0, 0, 0], scale = 9 }) {
 
 // Preload so it pops in faster
 useGLTF.preload("/models/coffeeshop.glb");
+
+function MagicFrog({ position = [0, 0, 0], scale = 0.2 }) {
+  const group = useRef();
+  const facing = useMemo(() => [0, -Math.PI/22 , 0], []);
+  const { scene, animations } = useGLTF("/models/magic_frog.glb");
+  const { actions, names } = useAnimations(animations, group);
+
+  useEffect(() => {
+    if (!actions || !names?.length) return;
+    const action = actions[names[0]];
+    action?.reset().fadeIn(0.2).play();
+    return () => action?.fadeOut(0.2);
+  }, [actions, names]);
+
+  return (
+    <RigidBody type="fixed" colliders={false} position={position} scale={scale}>
+      <group rotation={facing}>
+        <group ref={group}>
+          <primitive object={scene} />
+        </group>
+      </group>
+      <CuboidCollider args={[0.5, 0.6, 0.5]} position={[0, 0.6, 0]} />
+    </RigidBody>
+  );
+}
+
+useGLTF.preload("/models/magic_frog.glb");
 
 
 function Ocean({ y = -0.6, size = 600 }) {
@@ -410,11 +672,71 @@ function Ocean({ y = -0.6, size = 600 }) {
 
 export default function World() {
   const nav = useNavigate();
+  const isMobile = useIsMobile();
+  const { input, consumeLook } = useUnifiedInput(isMobile);
 
-  const [books, setBooks] = useState([{ id: "1", pos: [0, 1, -2] }]);
-  const plus = [4, 1, -2];
-
+  const [books, setBooks] = useState([{ id: "1", pos: [1, 1.0, 7] }]);
   const [prompt, setPrompt] = useState(null);
+  const frogPos = useMemo(() => [10, 0.7, -3], []);
+  const minionAudioRef = useRef(null);
+  const ambientAudioRef = useRef(null);
+  const chickAudioRef = useRef(null);
+  const audioUnlockedRef = useRef(false);
+  const frogNearRef = useRef(false);
+  const lastMoveSoundAtRef = useRef(0);
+  const lastPosRef = useRef(null);
+
+  useEffect(() => {
+    const minion = new Audio("/sfx/minion-speaking-made-with-Voicemod.mp3");
+    minion.preload = "auto";
+    minion.volume = 0.2;
+    minionAudioRef.current = minion;
+
+    const ambient = new Audio(
+      "/sfx/lwdickens__river-winter-heard-above-from-foot-bridge(chosic.com).mp3"
+    );
+    ambient.preload = "auto";
+    ambient.loop = true;
+    ambient.volume = 0.8;
+    ambientAudioRef.current = ambient;
+    ambient.play().catch(() => {});
+
+    const chick = new Audio("/sfx/nikin-short-chick-sound-171389 (mp3cut.net).mp3");
+    chick.preload = "auto";
+    chick.volume = 0.6;
+    chickAudioRef.current = chick;
+
+    return () => {
+      minion.pause();
+      ambient.pause();
+      chick.pause();
+    };
+  }, []);
+
+  const unlockAudio = useCallback(() => {
+    if (audioUnlockedRef.current) return;
+    audioUnlockedRef.current = true;
+    const ambient = ambientAudioRef.current;
+    if (ambient && ambient.paused) {
+      ambient.play().catch(() => {});
+    }
+  }, []);
+
+  const playMinion = useCallback(() => {
+    if (!audioUnlockedRef.current) return;
+    const minion = minionAudioRef.current;
+    if (!minion) return;
+    minion.currentTime = 0;
+    minion.play().catch(() => {});
+  }, []);
+
+  const playChick = useCallback(() => {
+    if (!audioUnlockedRef.current) return;
+    const chick = chickAudioRef.current;
+    if (!chick) return;
+    chick.currentTime = 0;
+    chick.play().catch(() => {});
+  }, []);
 
   // Debounce E so holding it doesn’t spam actions
   const eWasDown = useRef(false);
@@ -425,30 +747,47 @@ export default function World() {
 
     let hit = null;
 
+    // Chick sound while moving (every 35s)
+    const now = performance.now();
+    if (lastPosRef.current) {
+      const dx = p.x - lastPosRef.current.x;
+      const dz = p.z - lastPosRef.current.z;
+      const moving = Math.hypot(dx, dz) > 0.001;
+      const due = lastMoveSoundAtRef.current === 0 || now - lastMoveSoundAtRef.current >= 35000;
+      if (moving && due) {
+        lastMoveSoundAtRef.current = now;
+        playChick();
+      }
+    }
+    lastPosRef.current = { x: p.x, z: p.z };
+
     // Find book proximity
     for (const b of books) {
       const d = Math.hypot(p.x - b.pos[0], p.y - b.pos[1], p.z - b.pos[2]);
       if (d < 1.6) {
         hit = {
-          text: `Press E to open Book ${b.id}`,
+          text: isMobile ? `Tap Interact to open Book ${b.id}` : `Press E to open Book ${b.id}`,
           go: () => nav(`/diary/${b.id}`),
         };
         break;
       }
     }
 
-    // Plus proximity
+    // Magic frog proximity
     if (!hit) {
-      const dPlus = Math.hypot(p.x - plus[0], p.y - plus[1], p.z - plus[2]);
-      if (dPlus < 1.6) {
+      const dFrog = Math.hypot(p.x - frogPos[0], p.y - frogPos[1], p.z - frogPos[2]);
+      if (dFrog < 1.8) {
+        if (!frogNearRef.current) {
+          frogNearRef.current = true;
+          playMinion();
+        }
         hit = {
-          text: "Press E to create a new book",
-          go: () =>
-            setBooks((prev) => [
-              ...prev,
-              { id: String(prev.length + 1), pos: [prev.length - 2, 1, -3] },
-            ]),
+          text: "Hi, want to make a journal with your friends?",
+          actionLabel: "Go to Diary",
+          go: () => nav("/diary/1"),
         };
+      } else {
+        frogNearRef.current = false;
       }
     }
 
@@ -458,7 +797,11 @@ export default function World() {
   }
 
   return (
-    <div style={{ height: "100dvh", width: "100vw" }}>
+    <div
+      style={{ height: "100dvh", width: "100vw" }}
+      onPointerDown={unlockAudio}
+      onTouchStart={unlockAudio}
+    >
       <Canvas camera={{ fov: 50 }} style={{ height: "100%", width: "100%", display: "block" }}>
           <Environment
     files="/hdri/coffee_sky.hdr"
@@ -469,7 +812,7 @@ export default function World() {
   <ambientLight intensity={0.6} />
   <directionalLight position={[5, 10, 5]} intensity={0.1} />
 
-  <PointerLockControls />
+  {!isMobile && <PointerLockControls />}
 
   <Physics>
 
@@ -479,23 +822,28 @@ export default function World() {
     {/* Coffee shop collision */}
     <CoffeeShop position={[0, -0.3, 0]} scale={1} />
 
+    {/* Magic frog */}
+    <MagicFrog position={frogPos} scale={0.2} />
+
     {/* Interactive objects */}
     {books.map((b) => (
       <Book key={b.id} pos={b.pos} label={`Book ${b.id}`} />
     ))}
-    <Plus pos={plus} />
-
     <RigidBody type="fixed" colliders={false}>
   <CuboidCollider args={[400, 0.5, 400]} position={[0, -1, 0]} />
 </RigidBody>
 
     {/* Player */}
-    <Player onTick={tick} />
+    <Player onTick={tick} inputRef={input} consumeLook={consumeLook} />
   </Physics>
 </Canvas>
 
+{!isMobile && (
 <div 
- onClick={() => document.body.requestPointerLock?.()}
+ onClick={() => {
+  unlockAudio();
+  document.body.requestPointerLock?.();
+}}
 style={{
   position: "fixed",
   top: 12,
@@ -508,29 +856,61 @@ style={{
 }}>
   Click to lock mouse • Move mouse to look • WASD to move • Esc to unlock
 </div>
+)}
 
       {/* Responsive prompt */}
       {prompt && (
-        <div
-          style={{
-            position: "fixed",
-            bottom: 16,
-            left: "50%",
-            transform: "translateX(-50%)",
-            background: "rgba(0,0,0,0.7)",
-            color: "#fff",
-            padding: "10px 12px",
-            borderRadius: 12,
-            maxWidth: "min(520px, 92vw)",
-            textAlign: "center",
-            fontSize: 14,
-          }}
-        >
-          {prompt.text}
-        </div>
+        <>
+          <div
+            style={{
+              position: "fixed",
+              bottom: 64,
+              left: "50%",
+              transform: "translateX(-50%)",
+              background: "rgba(0,0,0,0.7)",
+              color: "#fff",
+              padding: "10px 12px",
+              borderRadius: 12,
+              maxWidth: "min(520px, 92vw)",
+              textAlign: "center",
+              fontSize: 14,
+              pointerEvents: "none",
+            }}
+          >
+            {prompt.text}
+          </div>
+          {prompt.actionLabel && (
+            <div
+              style={{
+                position: "fixed",
+                bottom: 16,
+                left: "50%",
+                transform: "translateX(-50%)",
+                pointerEvents: "auto",
+              }}
+            >
+              <button
+                onClick={prompt.go}
+                style={{
+                  display: "inline-block",
+                  padding: "8px 12px",
+                  borderRadius: 999,
+                  background: "rgba(255,255,255,0.9)",
+                  color: "#111",
+                  border: "none",
+                  fontSize: 13,
+                  cursor: "pointer",
+                }}
+              >
+                {prompt.actionLabel}
+              </button>
+            </div>
+          )}
+        </>
       )}
 
       {/* Tiny HUD */}
+      {!isMobile && (
       <div
         style={{
           position: "fixed",
@@ -545,6 +925,14 @@ style={{
       >
         WASD to move • E to interact
       </div>
+      )}
+
+      {isMobile && (
+        <MobileControls
+          inputRef={input}
+          showInteract={!!prompt}
+        />
+      )}
     </div>
 
   );
