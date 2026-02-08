@@ -1,18 +1,58 @@
 services:
   auth-service:
     build: ../backend/auth-service
+    environment:
+      - JWT_SECRET=dev-super-secret-change-me
     expose:
       - "8000"
+    networks:
+      - internal
 
   user-service:
-    build: ../backend/user-service 
+    build: ../backend/user-service
     expose:
       - "8001"
+    networks:
+      - internal
 
   diary-service:
     build: ../backend/diary-service
     expose:
       - "8002"
+    networks:
+      - internal
+
+  realtime-service:
+    build: ../backend/realtime-service
+    environment:
+      - JWT_SECRET=dev-super-secret-change-me
+      - PGHOST=postgres
+      - PGPORT=5432
+      - PGUSER=postgres
+      - PGPASSWORD=postgres
+      - PGDATABASE=auth_db
+    expose:
+      - "8003"
+    networks:
+      - internal
+    depends_on:
+      - postgres
+
+  api-gateway:
+    build: ../backend/api-gateway
+    expose:
+      - "8080"
+    depends_on:
+      - auth-service
+      - user-service
+      - diary-service
+      - realtime-service
+    environment:
+      - JWT_SECRET=dev-super-secret-change-me
+    ports:
+      - "8080:8080"
+    networks:
+      - internal
 
   waf:
     image: owasp/modsecurity-crs:nginx-alpine
@@ -25,30 +65,23 @@ services:
     environment:
       - BACKEND=http://api-gateway:8080
       - PARANOIA=1
+    depends_on:
+      - api-gateway
     networks:
       - external
       - internal
-    depends_on:
-      - api-gateway
 
-  realtime-service:
-    build: ../backend/realtime-service
-    expose:
-      - "8003"
-
-  api-gateway:
-    build: ../backend/api-gateway
-    expose:
-      - "8080"
-    depends_on:
-      - auth-service
-      - user-service
-      - diary-service
-      - realtime-service
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: auth_db
     ports:
-      - "8080:8080"
+      - "5432:5432"
     networks:
       - internal
+
 
   vault:
     image: hashicorp/vault:1.15
@@ -63,8 +96,6 @@ services:
     networks:
       - internal
 
-
 networks:
   external:
   internal:
-
