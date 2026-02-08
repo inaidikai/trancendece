@@ -1,20 +1,30 @@
-const fastify = require('fastify');
-const app = fastify();
+const fastify = require("fastify");
+const jwt = require("@fastify/jwt");
 
+const app = fastify();
 const PORT = 8000;
 
-app.get('/health', async (request, reply) => {
-  return { status: 'Auth OK' };
+app.register(jwt, {
+  secret: process.env.JWT_SECRET || "supersecret",
 });
 
-const start = async () => {
-  try {
-    await app.listen({ port: PORT, host: '0.0.0.0' });
-    console.log(`Auth service running on port ${PORT}`);
-  } catch (err) {
-    app.log.error(err);
-    process.exit(1);
-  }
-};
+app.get("/health", async () => ({ status: "Auth OK" }));
 
-start();
+// minimal dev login: accepts anything, issues token
+app.post("/login", async (req, reply) => {
+  const { email } = req.body || {};
+  if (!email) return reply.code(400).send({ error: "email required" });
+
+  const token = app.jwt.sign({ userId: email }); // payload uses userId (important)
+  return { token };
+});
+
+app.post("/register", async (req, reply) => {
+  const { email } = req.body || {};
+  if (!email) return reply.code(400).send({ error: "email required" });
+
+  const token = app.jwt.sign({ userId: email });
+  return { token };
+});
+
+app.listen({ port: PORT, host: "0.0.0.0" });

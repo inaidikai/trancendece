@@ -28,6 +28,13 @@ app.register(httpProxy, {
   prefix: "/diary",
 });
 
+app.register(httpProxy, {
+  upstream: "http://realtime-service:8003",
+  prefix: "/socket.io/",
+  websocket: true,
+});
+
+
 const start = async () => {
   try {
     await app.listen({ port: 8080, host: "0.0.0.0" });

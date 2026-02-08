@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { testSocket } from "../socketTest";
 
 export default function Login() {
   const nav = useNavigate();
@@ -26,10 +27,24 @@ export default function Login() {
 
           <button
             className="btn"
-            onClick={() => {
-              localStorage.setItem("token", "dev-token");
-              nav("/world"); // straight to 3D world
-            }}
+          onClick={async () => {
+            try {
+            const res = await fetch("/api/auth/login", {
+            method: "POST",
+             headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ email, password }),
+             });
+              if (!res.ok) throw new Error("Login failed");
+              const data = await res.json();
+              localStorage.setItem("token", data.token);
+              testSocket(data.token);
+              nav("/world");
+            } catch (e) {
+              console.error(e);
+              alert("Login failed");
+            }
+          }}
+
           >
             Enter
           </button>

@@ -7,6 +7,7 @@ import { Sky, Text, useGLTF, PointerLockControls } from "@react-three/drei";
 import { CuboidCollider } from "@react-three/rapier";
 import { useRapier } from "@react-three/rapier";
 import { useAnimations } from "@react-three/drei";
+import { makeSocket } from "../socket";
 
 import { Water } from "three-stdlib";
 import { useThree } from "@react-three/fiber";
@@ -671,6 +672,7 @@ function Ocean({ y = -0.6, size = 600 }) {
 
 
 export default function World() {
+  
   const nav = useNavigate();
   const isMobile = useIsMobile();
   const { input, consumeLook } = useUnifiedInput(isMobile);
@@ -685,6 +687,28 @@ export default function World() {
   const frogNearRef = useRef(false);
   const lastMoveSoundAtRef = useRef(0);
   const lastPosRef = useRef(null);
+  
+  useEffect(() => {
+  const s = makeSocket();
+
+  console.log("socket token exists?", !!localStorage.getItem("token"));
+
+  s.on("connect", () => console.log("socket connected", s.id));
+  s.on("ready", (msg) => console.log("ready", msg));
+  s.on("pong", () => console.log("pong"));
+  s.on("connect_error", (e) =>
+    console.log("connect_error", e?.message || e)
+  );
+
+  // quick test ping after connect
+  s.on("connect", () => {
+    s.emit("ping");
+  });
+
+  return () => {
+    s.disconnect();
+  };
+}, []);
 
   useEffect(() => {
     const minion = new Audio("/sfx/minion-speaking-made-with-Voicemod.mp3");
@@ -937,3 +961,5 @@ style={{
 
   );
 }
+
+

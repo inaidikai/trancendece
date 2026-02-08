@@ -1,20 +1,8 @@
-const fastify = require('fastify');
-const app = fastify();
+const fastify = require("fastify")({ logger: true });
+const createWebSocketServer = require("./websocket/websocketServer");
 
-const PORT = 8003;
+fastify.get("/health", async () => ({ status: "Realtime OK" }));
 
-app.get('/health', async (request, reply) => {
-  return { status: 'Realtime OK' };
-});
+createWebSocketServer(fastify.server);
 
-const start = async () => {
-  try {
-    await app.listen({ port: PORT, host: '0.0.0.0' });
-    console.log(`Realtime service running on port ${PORT}`);
-  } catch (err) {
-    app.log.error(err);
-    process.exit(1);
-  }
-};
-
-start();
+fastify.listen({ port: 8003, host: "0.0.0.0" });

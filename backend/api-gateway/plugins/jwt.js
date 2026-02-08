@@ -1,40 +1,32 @@
 const fp = require("fastify-plugin");
 const jwt = require("@fastify/jwt");
 
-/**
- * JWT Authentication Plugin
- * Verifies JWT tokens on all protected routes
- * Skips: /health, /auth/login, /auth/register
- */
-module.exports = fp(async (app, options) => {
-  // Register JWT plugin
+module.exports = fp(async function jwtPlugin(app) {
   app.register(jwt, {
-    secret: process.env.JWT_SECRET || "supersecret",
+    secret: process.env.JWT_SECRET || "dev-super-secret-change-me",
   });
 
-  // JWT verification hook
-  app.addHook("preHandler", async (request, reply) => {
-    // Skip JWT verification for public endpoints
-    const publicRoutes = [
-      "/health",
-      "/auth/login",
-      "/auth/register",
-      "/auth/health",
-    ];
-
-    if (publicRoutes.some((route) => request.url.startsWith(route))) {
-      return;
-    }
-
+  app.decorate("authenticate", async function (request, reply) {
     try {
       await request.jwtVerify();
-
-      // Add user id to headers for downstream services
-      if (request.user && request.user.id) {
-        request.headers["x-user-id"] = request.user.id;
-      }
     } catch (err) {
       reply.code(401).send({ error: "Unauthorized" });
     }
+  });
+
+  // Global auth hook with safe exclusions
+  app.addHook("preHandler", async (request, reply) => {
+    const url = request.raw.url || "";
+
+    // ✅ public routes
+    if (url.startsWith("/health")) return;
+    if (url.startsWith("/auth")) return;
+
+    // ✅ Socket.IO handshake + upgrade must pass through gateway;
+    // realtime-service will authenticate using socket.handshake.auth.token
+    if (url.startsWith("/socket.io")) return;
+
+    // everything else requires Authorization: Bearer <JWT>
+    return app.authenticate(request, reply);
   });
 });
