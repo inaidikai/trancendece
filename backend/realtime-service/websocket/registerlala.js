@@ -8,6 +8,7 @@ const DIARY_COLLAB_WS_EVENTS = require("./realtime/constants/diaryCollabWsEvents
 const presence = require("./realtime/handlers/presence");
 const friends = require("./realtime/handlers/friends");
 const collab = require("./realtime/handlers/collaboration");
+const registerNotifications = require("./realtime/handlers/notifications");
 
 // --------------------
 // Socket-friendly rate limit
@@ -82,6 +83,8 @@ module.exports = async function registerLola(io, socket) {
     if (!entryId) return;
     await collab.handleStateRequest(io, socket, userId, entryId);
   });
+
+  registerNotifications(io, socket);
 
   // Disconnect cleanup
   socket.on("disconnect", async () => {
