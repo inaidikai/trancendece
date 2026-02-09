@@ -71,6 +71,14 @@ services:
       - external
       - internal
 
+    # ✅ OVERRIDE the image healthcheck (THIS IS A MAPPING)
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/health >/dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 15s
+
   postgres:
     image: postgres:16
     environment:

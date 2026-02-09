@@ -3,6 +3,7 @@
     "@fastify/jwt": "^6.7.1",
     "http-proxy-middleware": "^3.0.5",
     "jsonwebtoken": "^9.0.3",
-    "socket.io-client": "^4.8.3"
+    "socket.io-client": "^4.8.3",
+    "wscat": "^6.1.0"
   }
 }
