@@ -10,6 +10,49 @@ const friends = require("./realtime/handlers/friends");
 const collab = require("./realtime/handlers/collaboration");
 const registerNotifications = require("./realtime/handlers/notifications");
 
+// Add Express middleware to parse JSON
+app.use(express.json());
+
+// Trigger endpoint for REST API to send notifications
+app.post('/trigger/notification', async (req, res) => {
+  const { userId, notification } = req.body;
+  
+  try {
+    // Save to database
+    const result = await pool.query(
+      `INSERT INTO notifications (user_id, type, title, message, data, priority)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING *`,
+      [
+        userId,
+        notification.type,
+        notification.title,
+        notification.message,
+        JSON.stringify(notification.data || {}),
+        notification.priority || 'medium'
+      ]
+    );
+
+    const savedNotification = result.rows[0];
+
+    // Find user's socket and emit
+    const userSocket = Array.from(io.sockets.sockets.values()).find(
+      s => s.userId === userId
+    );
+
+    if (userSocket) {
+      userSocket.emit('notification:created', {
+        notification: savedNotification,
+        timestamp: Date.now()
+      });
+    }
+
+    res.json({ success: true, notification: savedNotification });
+  } catch (error) {
+    console.error('Trigger notification error:', error);
+    res.status(500).json({ error: 'Failed to send notification' });
+  }
+});
 // --------------------
 // Socket-friendly rate limit
 // --------------------
