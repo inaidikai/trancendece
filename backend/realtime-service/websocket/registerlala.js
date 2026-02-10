@@ -88,6 +88,7 @@ const cursorStore = new Map(); // entryId -> Map(userId -> cursorData)
 // --------------------
 module.exports = async function registerLola(io, socket) {
   const userId = socket.data.userId;
+  socket.join(`user_${socket.data.userId}`);
 
   // minimal baseline
   socket.emit("ready", { userId });
