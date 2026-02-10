@@ -1,6 +1,6 @@
 const { Server } = require("socket.io");
 const authenticateSocket = require("../middleware/authenticateSocket");
-const registerLola = require("./registerlala");
+const registerLola = require("./registerLola");
 
 module.exports = function createWebSocketServer(httpServer) {
   const io = new Server(httpServer, {

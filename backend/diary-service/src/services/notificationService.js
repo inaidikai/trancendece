@@ -1,31 +1,54 @@
 const pool = require('../db/connection');
 const axios = require('axios');
 
-const WS_SERVER_URL = process.env.WS_SERVER_URL || 'http://localhost:8003';
+// IMPORTANT: in Docker use http://realtime-service:8003 (not localhost)
+const WS_SERVER_URL = process.env.WS_SERVER_URL || 'http://realtime-service:8003';
 
 class NotificationService {
-  // Create notification and trigger WebSocket
-  static async createNotification({ userId, type, title, message, data, priority = 'medium', actionUrl }) {
+  /**
+   * Create notification in DB + trigger WebSocket push
+   * Matches table created in infrastructure/db/init/001_lola_schema.sql:
+   * notifications(recipient_id, sender_id, type, entity_type, entity_id, title, message, metadata, ...)
+   */
+  static async createNotification({
+    recipientId,          // required
+    senderId = null,      // optional (actor)
+    type,                 // required
+    entityType,           // required
+    entityId = null,      // optional
+    title,                // required
+    message,              // required
+    metadata = {},        // optional object (JSONB)
+  }) {
     try {
-      // Save to database
+      // 1) Save to database
       const result = await pool.query(
-        `INSERT INTO notifications (user_id, type, title, message, data, priority, action_url)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)
+        `INSERT INTO notifications
+          (recipient_id, sender_id, type, entity_type, entity_id, title, message, metadata)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
          RETURNING *`,
-        [userId, type, title, message, JSON.stringify(data || {}), priority, actionUrl]
+        [
+          recipientId,
+          senderId,
+          type,
+          entityType,
+          entityId,
+          title,
+          message,
+          metadata,
+        ]
       );
 
       const notification = result.rows[0];
 
-      // Trigger WebSocket event
+      // 2) Trigger WebSocket event (don’t fail DB insert if WS fails)
       try {
         await axios.post(`${WS_SERVER_URL}/trigger/notification`, {
-          userId,
-          notification
+          userId: recipientId,
+          notification,
         });
       } catch (wsError) {
         console.error('WebSocket trigger failed:', wsError.message);
-        // Don't fail the whole operation if WebSocket fails
       }
 
       return notification;
@@ -35,12 +58,9 @@ class NotificationService {
     }
   }
 
-  // Create multiple notifications (batch)
+  // Batch helper
   static async createBatchNotifications(notifications) {
-    const promises = notifications.map(notif => 
-      this.createNotification(notif)
-    );
-    
+    const promises = notifications.map((n) => this.createNotification(n));
     return Promise.allSettled(promises);
   }
 }

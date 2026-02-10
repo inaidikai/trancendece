@@ -12,10 +12,10 @@ const { NOTIFICATION_WS_EVENTS, NOTIFICATION_CHANNELS, NOTIFICATION_STATUS } = r
 async function emitNotificationToUser(io, userId, notification) {
   try {
     // Find user's socket
-    const userSockets = await io.in(`user:${userId}`).fetchSockets();
+    const userSockets = await io.in(`user_${userId}`).fetchSockets();
     
     if (userSockets.length > 0) {
-      io.to(`user:${userId}`).emit(NOTIFICATION_WS_EVENTS.NOTIFICATION_CREATED, {
+      io.to(`user_${userId}`).emit(NOTIFICATION_WS_EVENTS.NOTIFICATION_CREATED, {
         notification,
         timestamp: Date.now(),
       });
@@ -65,10 +65,10 @@ async function emitNotificationToUsers(io, userIds, notification) {
  */
 async function emitBatchNotification(io, userId, batch) {
   try {
-    const userSockets = await io.in(`user:${userId}`).fetchSockets();
+    const userSockets = await io.in(`user_${userId}`).fetchSockets();
     
     if (userSockets.length > 0) {
-      io.to(`user:${userId}`).emit(NOTIFICATION_WS_EVENTS.NOTIFICATION_BATCH, {
+      io.to(`user_${userId}`).emit(NOTIFICATION_WS_EVENTS.NOTIFICATION_BATCH, {
         batch,
         timestamp: Date.now(),
       });
@@ -88,7 +88,7 @@ async function emitBatchNotification(io, userId, batch) {
 async function handleSubscribe(socket, userId) {
   try {
     // Join user-specific room for notifications
-    await socket.join(`user:${userId}`);
+    await socket.join(`user_${userId}`);
     
     // Send current unread count
     const unreadCount = await NotificationService.getUnreadCount(userId);
@@ -114,7 +114,7 @@ async function handleSubscribe(socket, userId) {
  */
 async function handleUnsubscribe(socket, userId) {
   try {
-    await socket.leave(`user:${userId}`);
+    await socket.leave(`user_${userId}`);
     console.log(`📭 User ${userId} unsubscribed from notifications`);
   } catch (error) {
     console.error('[NotificationHandler] Unsubscribe error:', error);
@@ -179,7 +179,7 @@ async function handleMarkAsRead(io, socket, userId, { notificationIds }) {
     });
 
     // Broadcast updated count to all user's connected clients
-    io.to(`user:${userId}`).emit(NOTIFICATION_WS_EVENTS.NOTIFICATION_COUNT_RESPONSE, {
+    io.to(`user_${userId}`).emit(NOTIFICATION_WS_EVENTS.NOTIFICATION_COUNT_RESPONSE, {
       count: newUnreadCount,
       timestamp: Date.now(),
     });
@@ -201,7 +201,7 @@ async function handleMarkAsUnread(io, socket, userId, { notificationId }) {
     const newUnreadCount = await NotificationService.getUnreadCount(userId);
     
     // Broadcast updated count to all user's connected clients
-    io.to(`user:${userId}`).emit(NOTIFICATION_WS_EVENTS.NOTIFICATION_COUNT_RESPONSE, {
+    io.to(`user_${userId}`).emit(NOTIFICATION_WS_EVENTS.NOTIFICATION_COUNT_RESPONSE, {
       count: newUnreadCount,
       timestamp: Date.now(),
     });
@@ -228,7 +228,7 @@ async function handleMarkAllAsRead(io, socket, userId) {
     });
 
     // Broadcast to all user's connected clients
-    io.to(`user:${userId}`).emit(NOTIFICATION_WS_EVENTS.NOTIFICATION_COUNT_RESPONSE, {
+    io.to(`user_${userId}`).emit(NOTIFICATION_WS_EVENTS.NOTIFICATION_COUNT_RESPONSE, {
       count: 0,
       timestamp: Date.now(),
     });

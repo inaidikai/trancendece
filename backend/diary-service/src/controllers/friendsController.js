@@ -89,19 +89,26 @@ class FriendsController {
       const sender = senderInfo.rows[0];
 
       // Create notification
-      await NotificationService.createNotification({
-        userId: receiverId,
-        type: 'friend_request_received',
-        title: 'New Friend Request',
-        message: `${sender.username} sent you a friend request`,
-        data: {
-          requestId: request.id,
-          senderId: senderId,
-          senderUsername: sender.username,
-          senderAvatar: sender.avatar
-        },
-        priority: 'medium'
-      });
+await NotificationService.createNotification({
+  recipientId: receiverId,     // who receives the notification
+  senderId: senderId,          // who triggered it
+
+  type: 'friend_request_received',
+  entityType: 'friend_request',
+  entityId: request.id,
+
+  title: 'New Friend Request',
+  message: `${sender.username} sent you a friend request`,
+
+  metadata: {
+    requestId: request.id,
+    senderId: senderId,
+    senderUsername: sender.username,
+    senderAvatar: sender.avatar,
+    priority: 'medium'
+  }
+});
+
 
       res.status(201).json({
         message: 'Friend request sent',
@@ -195,16 +202,23 @@ class FriendsController {
 
         // Notify sender
         await NotificationService.createNotification({
-          userId: request.sender_id,
-          type: 'friend_request_accepted',
-          title: 'Friend Request Accepted',
-          message: `${username} accepted your friend request`,
-          data: {
-            friendId: userId,
-            friendUsername: username
-          },
-          priority: 'medium'
-        });
+  recipientId: request.sender_id, // who receives the notification
+  senderId: userId,               // who accepted the request
+
+  type: 'friend_request_accepted',
+  entityType: 'friend_request',
+  entityId: request.id,
+
+  title: 'Friend Request Accepted',
+  message: `${username} accepted your friend request`,
+
+  metadata: {
+    friendId: userId,
+    friendUsername: username,
+    priority: 'medium'
+  }
+});
+
 
         res.json({ message: 'Friend request accepted' });
 

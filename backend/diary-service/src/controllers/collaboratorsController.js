@@ -124,20 +124,25 @@ class CollaboratorsController {
 
       // Create notification
       await NotificationService.createNotification({
-        userId: collaboratorId,
-        type: 'collaboration_invite',
-        title: 'Collaboration Invite',
-        message: `${inviterUsername} invited you to collaborate on "${entry.title}"`,
-        data: {
-          inviteId: invitation.id,
-          entryId: entryId,
-          entryTitle: entry.title,
-          inviterId: userId,
-          inviterUsername: inviterUsername,
-          role: role
-        },
-        priority: 'high',
-        actionUrl: `/entries/${entryId}/invites`
+        recipientId: collaboratorId,   // who receives it
+  senderId: userId,               // who sent it
+
+  type: 'collaboration_invite',
+  entityType: 'diary_entry',
+  entityId: entryId,
+
+  title: 'Collaboration Invite',
+  message: `${inviterUsername} invited you to collaborate on "${entry.title}"`,
+
+  metadata: {
+    inviteId: invitation.id,
+    entryId: entryId,
+    entryTitle: entry.title,
+    inviterId: userId,
+    inviterUsername: inviterUsername,
+    role: role,
+    actionUrl: `/entries/${entryId}/invites`,
+    priority: 'high'}
       });
 
       res.status(201).json({
@@ -224,17 +229,24 @@ class CollaboratorsController {
 
       // Notify owner
       await NotificationService.createNotification({
-        userId: invite.owner_id,
-        type: 'collaboration_accepted',
-        title: 'Invite Accepted',
-        message: `${username} accepted your collaboration invite for "${invite.entry_title}"`,
-        data: {
-          entryId: invite.entry_id,
-          collaboratorId: userId,
-          collaboratorUsername: username
-        },
+      recipientId: invite.owner_id,  // who receives it
+      senderId: userId,              // who accepted (the actor)
+
+      type: 'collaboration_accepted',
+      entityType: 'diary_entry',
+      entityId: invite.entry_id,
+
+      title: 'Invite Accepted',
+      message: `${username} accepted your collaboration invite for "${invite.entry_title}"`,
+
+      metadata: {
+        entryId: invite.entry_id,
+        collaboratorId: userId,
+        collaboratorUsername: username,
         priority: 'medium'
-      });
+      }
+    });
+
 
       res.json({ message: 'Invite accepted' });
     } catch (error) {

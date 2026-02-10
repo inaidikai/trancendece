@@ -1,4 +1,33 @@
 const pool = require('../db/connection');
+const NotificationService = require("../services/notificationService");
+
+// returns array of userIds that should be notified (owner + accepted collaborators), excluding actor
+async function getEntryRecipients(entryId, actorId) {
+  // Owner
+  const ownerRes = await pool.query(
+    `SELECT owner_id FROM diary_entries WHERE id = $1`,
+    [entryId]
+  );
+  if (ownerRes.rows.length === 0) return [];
+
+  const ownerId = ownerRes.rows[0].owner_id;
+
+  // Accepted collaborators
+  const collabRes = await pool.query(
+    `SELECT user_id
+     FROM collaborators
+     WHERE entry_id = $1 AND status = 'accepted'`,
+    [entryId]
+  );
+
+  const collaboratorIds = collabRes.rows.map(r => r.user_id);
+
+  // Combine + unique + exclude actor
+  const all = [ownerId, ...collaboratorIds];
+  const unique = [...new Set(all)].filter(id => id !== actorId);
+
+  return unique;
+}
 
 class EntriesController {
   // Get user's entries
@@ -86,6 +115,7 @@ class EntriesController {
   // Create new entry
   static async createEntry(req, res) {
     const userId = req.user.userId;
+    const username = req.user.username || "Someone";
     const { title, content = [], coverImage, isPrivate = true } = req.body;
 
     if (!title) {
@@ -100,9 +130,33 @@ class EntriesController {
         [userId, title, JSON.stringify(content), coverImage, isPrivate]
       );
 
+      const entry = result.rows[0];
+
+      // ✅ Notify collaborators/owner group (if any exist)
+      // (Usually none exist right at creation, but safe + meets requirement)
+      try {
+        const recipients = await getEntryRecipients(entry.id, userId);
+        if (recipients.length > 0) {
+          await NotificationService.createBatchNotifications(
+            recipients.map((recipientId) => ({
+              recipientId,
+              senderId: userId,
+              type: "entry_created",
+              entityType: "diary_entry",
+              entityId: entry.id,
+              title: "New diary entry",
+              message: `${username} created "${entry.title}"`,
+              metadata: { entryId: entry.id, entryTitle: entry.title }
+            }))
+          );
+        }
+      } catch (notifErr) {
+        console.error("Create-entry notification failed:", notifErr.message);
+      }
+
       res.status(201).json({
         message: 'Entry created',
-        entry: result.rows[0]
+        entry
       });
     } catch (error) {
       console.error('Create entry error:', error);
@@ -113,6 +167,7 @@ class EntriesController {
   // Update entry
   static async updateEntry(req, res) {
     const userId = req.user.userId;
+    const username = req.user.username || "Someone";
     const { id } = req.params;
     const { title, content, coverImage, isPrivate } = req.body;
 
@@ -171,10 +226,32 @@ class EntriesController {
       `;
 
       const result = await pool.query(query, values);
+      const entry = result.rows[0];
+
+      // ✅ Notify owner + accepted collaborators (except actor)
+      try {
+        const recipients = await getEntryRecipients(id, userId);
+        if (recipients.length > 0) {
+          await NotificationService.createBatchNotifications(
+            recipients.map((recipientId) => ({
+              recipientId,
+              senderId: userId,
+              type: "entry_updated",
+              entityType: "diary_entry",
+              entityId: Number(id),
+              title: "Diary entry updated",
+              message: `${username} updated "${entry.title}"`,
+              metadata: { entryId: Number(id), entryTitle: entry.title }
+            }))
+          );
+        }
+      } catch (notifErr) {
+        console.error("Update-entry notification failed:", notifErr.message);
+      }
 
       res.json({
         message: 'Entry updated',
-        entry: result.rows[0]
+        entry
       });
     } catch (error) {
       console.error('Update entry error:', error);
@@ -185,9 +262,20 @@ class EntriesController {
   // Delete entry
   static async deleteEntry(req, res) {
     const userId = req.user.userId;
+    const username = req.user.username || "Someone";
     const { id } = req.params;
 
     try {
+      // Fetch entry BEFORE deleting so we can notify with title/owner_id
+      const entryRes = await pool.query(
+        `SELECT id, title, owner_id FROM diary_entries WHERE id = $1`,
+        [id]
+      );
+      if (entryRes.rows.length === 0) {
+        return res.status(404).json({ error: "Entry not found" });
+      }
+      const entry = entryRes.rows[0];
+
       // Only owner can delete
       const result = await pool.query(
         `DELETE FROM diary_entries 
@@ -198,6 +286,34 @@ class EntriesController {
 
       if (result.rows.length === 0) {
         return res.status(403).json({ error: 'Only owner can delete entry' });
+      }
+
+      // ✅ Notify collaborators (and owner group except actor)
+      try {
+        const collabRes = await pool.query(
+          `SELECT user_id FROM collaborators WHERE entry_id = $1 AND status = 'accepted'`,
+          [id]
+        );
+
+        const recipients = [...new Set([entry.owner_id, ...collabRes.rows.map(r => r.user_id)])]
+          .filter(uid => uid !== userId);
+
+        if (recipients.length > 0) {
+          await NotificationService.createBatchNotifications(
+            recipients.map((recipientId) => ({
+              recipientId,
+              senderId: userId,
+              type: "entry_deleted",
+              entityType: "diary_entry",
+              entityId: Number(id),
+              title: "Diary entry deleted",
+              message: `${username} deleted "${entry.title}"`,
+              metadata: { entryId: Number(id), entryTitle: entry.title }
+            }))
+          );
+        }
+      } catch (notifErr) {
+        console.error("Delete-entry notification failed:", notifErr.message);
       }
 
       res.json({ message: 'Entry deleted' });

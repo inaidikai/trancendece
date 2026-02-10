@@ -52,7 +52,7 @@ app.listen(PORT, () => {
   console.log(`📊 Health check: http://localhost:${PORT}/health`);
 });
 
-const WS_SERVER_URL = 'http://localhost:8003';
+const WS_SERVER_URL = 'http://realtime-service:8003';
 
 // Service to trigger WebSocket events
 class WebSocketService {
