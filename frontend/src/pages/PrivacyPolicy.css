@@ -1,0 +1,59 @@
+@import url('https://fonts.googleapis.com/css2?family=Baloo+Thambi+2:wght@400;500;600;700&display=swap');
+
+.privacy-page {
+  min-height: 100vh;
+  background: #fffae8;
+  color: #000000;
+  font-family: "Baloo Thambi 2", sans-serif;
+  display: flex;
+  justify-content: center;
+  padding: 48px 20px;
+}
+
+.privacy-card {
+  max-width: 860px;
+  width: 100%;
+  background: #fffae8;
+}
+
+.policy-back {
+  background: transparent;
+  border: none;
+  color: #000000;
+  font-family: "Baloo Thambi 2", sans-serif;
+  font-size: 16px;
+  padding: 0;
+  margin-bottom: 12px;
+  cursor: pointer;
+}
+
+.policy-back:hover {
+  text-decoration: underline;
+}
+
+.privacy-card h1 {
+  font-size: 36px;
+  margin-bottom: 8px;
+}
+
+.privacy-updated {
+  font-size: 16px;
+  margin-bottom: 20px;
+}
+
+.privacy-card h2 {
+  margin-top: 22px;
+  margin-bottom: 8px;
+  font-size: 20px;
+}
+
+.privacy-card p,
+.privacy-card li {
+  font-size: 16px;
+  line-height: 1.6;
+}
+
+.privacy-card ul {
+  padding-left: 20px;
+  margin: 8px 0 0;
+}
