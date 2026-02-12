@@ -10,7 +10,7 @@ export default function GoogleCallback() {
     handleGoogleCallback()
       .then((result) => {
         console.log('Auth successful:', result);
-        navigate('/dashboard', { replace: true });
+        navigate('/world', { replace: true });
       })
       .catch((error) => {
         console.error('Auth failed:', error);
@@ -21,10 +21,24 @@ export default function GoogleCallback() {
 
   if (error) {
     return (
-      <div className="auth-layout">
-        <div className="auth-card-shell" style={{ maxWidth: '420px', textAlign: 'center' }}>
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        minHeight: '100vh',
+        backgroundColor: '#f4e4a8',
+        padding: '20px'
+      }}>
+        <div style={{
+          maxWidth: '420px',
+          textAlign: 'center',
+          backgroundColor: '#faf5e8',
+          padding: '40px',
+          borderRadius: '8px',
+          boxShadow: '0 2px 8px rgba(35, 4, 1, 0.1)'
+        }}>
           <h2 style={{ fontSize: '24px', marginBottom: '12px', color: '#8a2d23' }}>Authentication Failed</h2>
-          <p style={{ fontSize: '16px', marginBottom: '16px' }}>{error}</p>
+          <p style={{ fontSize: '16px', marginBottom: '16px', color: '#3B2A28' }}>{error}</p>
           <p style={{ fontSize: '14px', color: 'rgba(35, 4, 1, 0.7)' }}>Redirecting to login...</p>
         </div>
       </div>
@@ -32,9 +46,23 @@ export default function GoogleCallback() {
   }
 
   return (
-    <div className="auth-layout">
-      <div className="auth-card-shell" style={{ maxWidth: '420px', textAlign: 'center' }}>
-        <h2 style={{ fontSize: '24px', marginBottom: '12px' }}>Completing sign-in...</h2>
+    <div style={{
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      minHeight: '100vh',
+      backgroundColor: '#f4e4a8',
+      padding: '20px'
+    }}>
+      <div style={{
+        maxWidth: '420px',
+        textAlign: 'center',
+        backgroundColor: '#faf5e8',
+        padding: '40px',
+        borderRadius: '8px',
+        boxShadow: '0 2px 8px rgba(35, 4, 1, 0.1)'
+      }}>
+        <h2 style={{ fontSize: '24px', marginBottom: '12px', color: '#3B2A28' }}>Completing sign-in...</h2>
         <div style={{ 
           width: '40px', 
           height: '40px', 

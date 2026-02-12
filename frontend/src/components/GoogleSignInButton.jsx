@@ -25,7 +25,7 @@ export function GoogleSignInButton({ onSignInStart, onSignInError }) {
       block
     >
       <span className="auth-google-content">
-        <svg className="auth-google-icon" viewBox="0 0 48 48" aria-hidden="true">
+        <svg className="auth-google-icon" viewBox="0 0 48 48" aria-hidden="true" style={{ width: '20px', height: '20px', marginRight: '8px' }}>
           <path
             fill="#EA4335"
             d="M24 9.5c3.2 0 5.8 1.3 7.6 3l5.2-5.2C33.6 3.6 29.1 2 24 2 14.9 2 7.1 7.2 3.6 14.7l6.6 5.1C12 13.6 17.5 9.5 24 9.5z"

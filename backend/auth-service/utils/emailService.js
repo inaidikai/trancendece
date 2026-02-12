@@ -79,9 +79,25 @@ const sendWelcomeEmail = async (email, userName) => {
       html: `
         <h2>Welcome!</h2>
         <p>Hi ${userName || email},</p>
-        <p>HAHAHAHAH INSHAAA.</p>
+        <p>
+          <strong>Waddles</strong> is your personal diary platform — a safe space to write,
+          reflect, and express yourself while exploring a cozy <strong>3D world</strong> built
+          just for you 🌍✨
+        </p>
 
-        <p>Best regards,<br/>Waddles Team</p>
+        <p>
+          Capture your thoughts, relive your memories, and let your diary come alive
+          in a whole new dimension.
+        </p>
+
+        <p>
+          Ready to begin your journey? Your world is waiting 🚀
+        </p>
+
+        <p>
+          With love,<br/>
+          <strong>Team Waddles 🐧</strong>
+        </p>
       `,
     };
 

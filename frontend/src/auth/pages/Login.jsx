@@ -113,11 +113,11 @@ export default function Login({ navigate, setSession }) {
         </div>
       )}
       <GoogleSignInButton 
-        onSignInStart={() => setLoading(true)}
-        onSignInError={(error) => {
-          setBanner({ type: "error", text: error.message || "Google sign-in failed" });
-          setLoading(false);
-        }}
+        onSignInStart={() => setBanner(null)}
+        onSignInError={(error) => setBanner({ 
+          type: "error", 
+          text: error?.message || "Google sign-in failed" 
+        })}
       />
       <div className="auth-or">or</div>
       <form onSubmit={handleSubmit}>

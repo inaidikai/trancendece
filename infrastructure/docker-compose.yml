@@ -13,6 +13,9 @@ services:
       - PGUSER=postgres
       - PGPASSWORD=postgres
       - PGDATABASE=auth_db
+      - GOOGLE_CLIENT_ID=867201760066-jn66gja6jhs94a0mhhsaor64numn9k7d.apps.googleusercontent.com
+      - GOOGLE_CLIENT_SECRET=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
+      - GOOGLE_REDIRECT_URI=http://localhost:8081/auth/google/callback
     expose:
       - "8000"
     networks:

@@ -124,6 +124,33 @@ CREATE INDEX IF NOT EXISTS idx_activity_log_entity ON activity_log(entity_type, 
 CREATE INDEX IF NOT EXISTS idx_activity_log_created_at ON activity_log(created_at DESC);
 
 -- ============================================
+-- NOTIFICATIONS TABLE
+-- ============================================
+CREATE TABLE IF NOT EXISTS notifications (
+  id TEXT PRIMARY KEY,
+  recipient_id TEXT NOT NULL,
+  sender_id TEXT,
+  type TEXT NOT NULL,
+  entity_type TEXT NOT NULL,
+  entity_id TEXT,
+  title TEXT NOT NULL,
+  message TEXT NOT NULL,
+  metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+  is_read BOOLEAN NOT NULL DEFAULT FALSE,
+  read_at TIMESTAMP,
+  is_archived BOOLEAN NOT NULL DEFAULT FALSE,
+  archived_at TIMESTAMP,
+  created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_notifications_recipient_created
+  ON notifications (recipient_id, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_notifications_unread
+  ON notifications (recipient_id, is_read, is_archived);
+
+-- ============================================
 -- Insert test users (for development)
 -- ============================================
 INSERT INTO users (id, username, email, full_name, avatar, bio) VALUES
