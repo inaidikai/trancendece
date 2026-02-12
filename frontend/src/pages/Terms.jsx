@@ -69,7 +69,7 @@ export default function Terms() {
         <p>Terms may be updated at any time; continued use means acceptance.</p>
 
         <h2>8. Contact</h2>
-        <p>Questions? Email us at Quillow@gmail.com</p>
+        <p>Questions? Email us at contact.quilloww@gmail.com</p>
       </div>
     </div>
   );
