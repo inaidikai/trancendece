@@ -5,7 +5,7 @@ services:
       - JWT_SECRET=dev-super-secret-change-me
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-your-client-id-here}
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-your-client-secret-here}
-      - GOOGLE_REDIRECT_URI=http://localhost:8081/auth/google/callback
+      - GOOGLE_REDIRECT_URI=https://quillow.local:8081/auth/google/callback
     expose:
       - "8000"
     networks:
@@ -61,10 +61,13 @@ services:
     image: owasp/modsecurity-crs:nginx-alpine
     container_name: security_waf
     ports:
-      - "8081:80"
+      - "8081:443"
+      - "8082:80"
     volumes:
       - ../backend/waf/config/modsecurity-hardened.conf:/etc/nginx/modsec/modsecurity-hardened.conf:ro
       - ../backend/waf/config/default.conf:/etc/nginx/templates/conf.d/default.conf.template:ro
+      - ./certs/quillow.local.crt:/etc/nginx/certs/quillow.local.crt:ro
+      - ./certs/quillow.local.key:/etc/nginx/certs/quillow.local.key:ro
     environment:
       - BACKEND=http://api-gateway:8080
       - PARANOIA=1
@@ -76,7 +79,7 @@ services:
 
     # ✅ OVERRIDE the image healthcheck (THIS IS A MAPPING)
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/health >/dev/null 2>&1 || exit 1"]
+      test: ["CMD-SHELL", "wget --no-check-certificate -qO- https://127.0.0.1/health >/dev/null 2>&1 || exit 1"]
       interval: 10s
       timeout: 3s
       retries: 5

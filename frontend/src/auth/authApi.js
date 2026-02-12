@@ -169,13 +169,18 @@ export function updateProfile({ full_name, bio } = {}) {
 }
 
 export function updateDiaryProfile({ fullName, bio, avatar } = {}) {
-  return apiRequest("/diary/api/users/me/update", {
-    method: "POST",
-    auth: true,
-    body: {
-      ...(fullName !== undefined ? { fullName } : {}),
-      ...(bio !== undefined ? { bio } : {}),
-      ...(avatar !== undefined ? { avatar } : {}),
-    },
-  });
+  const payload = {
+    ...(fullName !== undefined ? { fullName } : {}),
+    ...(bio !== undefined ? { bio } : {}),
+    ...(avatar !== undefined ? { avatar } : {}),
+  };
+
+  return requestWithFallback(
+    ["/diary/api/users/me/update", "/auth/profile"],
+    {
+      method: "POST",
+      auth: true,
+      body: payload,
+    }
+  );
 }
