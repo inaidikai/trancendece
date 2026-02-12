@@ -1,5 +1,5 @@
 import React from "react";
-import { Routes, Route, Navigate, Link } from "react-router-dom";
+import { Routes, Route, Navigate } from "react-router-dom";
 
 import { AuthRoutes } from "./auth";
 import Dashboard from "./pages/Dashboard.jsx";
@@ -78,11 +78,6 @@ export default function App() {
 
         <Route path="*" element={<Navigate to="/world" replace />} />
       </Routes>
-
-      {/* tiny nav for testing */}
-      <div style={{ position: "fixed", bottom: 10, right: 10, opacity: 0.7 }}>
-        <Link to="/world">World</Link> | <Link to="/dashboard">Dashboard</Link>
-      </div>
     </div>
   );
 }

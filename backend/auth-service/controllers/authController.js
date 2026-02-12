@@ -4,6 +4,26 @@ const { sendWelcomeEmail, sendTwoFAEmail } = require('../utils/emailService');
 
 const TWO_FA_CODE_EXPIRY_MS = 10 * 60 * 1000;
 
+const isUniqueConstraintError = (error) => {
+  const message = String(error?.message || '').toLowerCase();
+  return error?.code === '23505' || message.includes('duplicate key value') || message.includes('unique constraint');
+};
+
+const getDuplicateFieldMessage = (error) => {
+  const constraint = String(error?.constraint || '').toLowerCase();
+  const detail = String(error?.detail || '').toLowerCase();
+  const message = String(error?.message || '').toLowerCase();
+  const combined = `${constraint} ${detail} ${message}`;
+
+  if (combined.includes('email')) {
+    return 'Email already exists';
+  }
+  if (combined.includes('username')) {
+    return 'Username already exists';
+  }
+  return 'Email or username already exists';
+};
+
 const buildPending2FASubject = (userId) => `${userId}_2fa_pending`;
 
 const isValidPending2FAToken = (userId, tempToken) => {
@@ -61,8 +81,8 @@ const register = (req, res) => {
     db.run(query, [userId, email.toLowerCase(), username, hashedPassword, full_name || null], function (err) {
       if (err) {
         console.error('Registration error:', err.message);
-        if (err.message.includes('UNIQUE')) {
-          return res.status(409).json({ error: 'Email or username already exists' });
+        if (isUniqueConstraintError(err)) {
+          return res.status(409).json({ error: getDuplicateFieldMessage(err) });
         }
         return res.status(500).json({ error: 'Database error', details: err.message });
       }

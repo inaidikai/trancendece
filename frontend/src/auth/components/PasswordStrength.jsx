@@ -1,22 +1,20 @@
 import React from "react";
+import { getPasswordRuleStates } from "../passwordPolicy";
 
 const getStrength = (password) => {
   if (!password) return { label: "", level: 0 };
-  const hasUpper = /[A-Z]/.test(password);
-  const hasLower = /[a-z]/.test(password);
-  const hasNumber = /[0-9]/.test(password);
-  const hasSymbol = /[^A-Za-z0-9]/.test(password);
+  const metCount = getPasswordRuleStates(password).filter((rule) => rule.met).length;
 
-  if (password.length >= 8 && hasNumber && hasSymbol) {
+  if (metCount === 5) {
     return { label: "Strong", level: 3 };
   }
-  if (password.length >= 6 && hasUpper && hasLower) {
+  if (metCount >= 3) {
     return { label: "Medium", level: 2 };
   }
-  if (password.length >= 6) {
+  if (metCount >= 1) {
     return { label: "Weak", level: 1 };
   }
-  return { label: "Weak", level: 1 };
+  return { label: "", level: 0 };
 };
 
 export default function PasswordStrength({ password }) {
