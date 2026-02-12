@@ -1,6 +1,41 @@
 const db = require('../config/database');
-const { hashPassword, comparePassword, generateToken, generateId } = require('../utils/auth');
-const speakeasy = require('speakeasy');
+const { hashPassword, comparePassword, generateToken, generateId, verifyToken } = require('../utils/auth');
+const { sendWelcomeEmail, sendTwoFAEmail } = require('../utils/emailService');
+
+const TWO_FA_CODE_EXPIRY_MS = 10 * 60 * 1000;
+
+const buildPending2FASubject = (userId) => `${userId}_2fa_pending`;
+
+const isValidPending2FAToken = (userId, tempToken) => {
+  if (!userId || !tempToken) return false;
+  const decoded = verifyToken(tempToken);
+  if (!decoded?.userId) return false;
+  return String(decoded.userId) === buildPending2FASubject(userId);
+};
+
+const issueAndSendTwoFACode = (user, callback) => {
+  const code = Math.floor(100000 + Math.random() * 900000).toString();
+  const expiresAt = new Date(Date.now() + TWO_FA_CODE_EXPIRY_MS);
+  const updateQuery = 'UPDATE users SET two_fa_code = $1, two_fa_code_expires = $2 WHERE id = $3';
+
+  db.run(updateQuery, [code, expiresAt, user.id], async (updateErr) => {
+    if (updateErr) {
+      callback(updateErr);
+      return;
+    }
+
+    try {
+      const sent = await sendTwoFAEmail(user.email, code, user.full_name || user.username);
+      if (!sent) {
+        callback(new Error('Failed to send 2FA code email'));
+        return;
+      }
+      callback(null);
+    } catch (emailErr) {
+      callback(emailErr);
+    }
+  });
+};
 
 // Register new user
 const register = (req, res) => {
@@ -32,6 +67,12 @@ const register = (req, res) => {
         return res.status(500).json({ error: 'Database error', details: err.message });
       }
 
+      // Send welcome email
+      sendWelcomeEmail(email, full_name || username).catch((welcomeErr) => {
+        console.error('Failed to send welcome email:', welcomeErr);
+        // Don't fail registration if email fails
+      });
+
       const token = generateToken(userId);
       res.status(201).json({
         message: 'User registered successfully',
@@ -39,7 +80,7 @@ const register = (req, res) => {
         token,
       });
     });
-  }).catch((err) => {
+  }).catch(() => {
     res.status(500).json({ error: 'Error hashing password' });
   });
 };
@@ -72,14 +113,21 @@ const login = (req, res) => {
 
       // Check if 2FA is enabled
       if (user.is_2fa_enabled) {
-        // Return a temporary token for 2FA verification
-        const tempToken = generateToken(user.id + '_2fa_pending');
-        return res.json({
-          message: '2FA required',
-          requires_2fa: true,
-          temp_token: tempToken,
-          user_id: user.id,
+        issueAndSendTwoFACode(user, (twoFAErr) => {
+          if (twoFAErr) {
+            console.error('2FA login issue:', twoFAErr);
+            return res.status(500).json({ error: 'Failed to send 2FA code' });
+          }
+
+          const tempToken = generateToken(buildPending2FASubject(user.id));
+          return res.json({
+            message: '2FA code sent to your email',
+            requires_2fa: true,
+            temp_token: tempToken,
+            user_id: user.id,
+          });
         });
+        return;
       }
 
       const token = generateToken(user.id);
@@ -94,7 +142,7 @@ const login = (req, res) => {
         },
         token,
       });
-    } catch (err) {
+    } catch {
       res.status(500).json({ error: 'Error during login' });
     }
   });
@@ -126,7 +174,7 @@ const logout = (req, res) => {
 
   if (token) {
     const query = 'DELETE FROM sessions WHERE user_id = $1 AND token = $2';
-      db.run(query, [userId, token], (err) => {
+    db.run(query, [userId, token], (err) => {
       if (err) console.error(err);
     });
   }
@@ -136,34 +184,47 @@ const logout = (req, res) => {
 
 // Verify 2FA during login
 const verify2FALogin = (req, res) => {
-  const { user_id, code } = req.body;
+  const { user_id, code, temp_token, tempToken } = req.body;
+  const pendingToken = temp_token || tempToken;
 
-  if (!user_id || !code) {
-    return res.status(400).json({ error: 'User ID and code are required' });
+  if (!user_id || !code || !pendingToken) {
+    return res.status(400).json({ error: 'User ID, code, and temp token are required' });
   }
 
-  const query = 'SELECT two_fa_secret, email, username, full_name, avatar_url FROM users WHERE id = $1 AND is_2fa_enabled = true';
+  if (!isValidPending2FAToken(user_id, pendingToken)) {
+    return res.status(401).json({ error: 'Invalid 2FA session. Please login again.' });
+  }
+
+  const query = 'SELECT two_fa_code, two_fa_code_expires, email, username, full_name, avatar_url FROM users WHERE id = $1 AND is_2fa_enabled = true';
 
   db.get(query, [user_id], (err, user) => {
     if (err) {
       return res.status(500).json({ error: 'Database error' });
     }
 
-    if (!user || !user.two_fa_secret) {
+    if (!user) {
       return res.status(404).json({ error: '2FA not enabled for this user' });
     }
 
-    // Verify TOTP token
-    const verified = speakeasy.totp.verify({
-      secret: user.two_fa_secret,
-      encoding: 'base32',
-      token: code,
-      window: 2,
-    });
-
-    if (!verified) {
-      return res.status(401).json({ error: 'Invalid or expired 2FA code' });
+    // Check if code exists and is not expired
+    if (!user.two_fa_code || !user.two_fa_code_expires) {
+      return res.status(400).json({ error: 'No 2FA code found. Please login again.' });
     }
+
+    if (new Date() > new Date(user.two_fa_code_expires)) {
+      return res.status(400).json({ error: '2FA code has expired. Please login again.' });
+    }
+
+    // Verify code matches
+    if (String(code) !== String(user.two_fa_code)) {
+      return res.status(401).json({ error: 'Invalid 2FA code' });
+    }
+
+    // Clear the code after successful verification
+    const clearQuery = 'UPDATE users SET two_fa_code = NULL, two_fa_code_expires = NULL WHERE id = $1';
+    db.run(clearQuery, [user_id], (clearErr) => {
+      if (clearErr) console.error('Error clearing 2FA code:', clearErr);
+    });
 
     // Generate token after successful 2FA
     const token = generateToken(user_id);
@@ -181,6 +242,40 @@ const verify2FALogin = (req, res) => {
   });
 };
 
+// Resend 2FA code during login challenge
+const resend2FALogin = (req, res) => {
+  const { user_id, temp_token, tempToken } = req.body;
+  const pendingToken = temp_token || tempToken;
+
+  if (!user_id || !pendingToken) {
+    return res.status(400).json({ error: 'User ID and temp token are required' });
+  }
+
+  if (!isValidPending2FAToken(user_id, pendingToken)) {
+    return res.status(401).json({ error: 'Invalid 2FA session. Please login again.' });
+  }
+
+  const query = 'SELECT id, email, username, full_name, is_2fa_enabled FROM users WHERE id = $1';
+  db.get(query, [user_id], (err, user) => {
+    if (err) {
+      return res.status(500).json({ error: 'Database error' });
+    }
+
+    if (!user || !user.is_2fa_enabled) {
+      return res.status(404).json({ error: '2FA not enabled for this user' });
+    }
+
+    issueAndSendTwoFACode(user, (twoFAErr) => {
+      if (twoFAErr) {
+        console.error('Resend 2FA issue:', twoFAErr);
+        return res.status(500).json({ error: 'Failed to resend 2FA code' });
+      }
+
+      res.json({ message: '2FA code resent to your email' });
+    });
+  });
+};
+
 // Verify token (for other services) - Internal API
 const verifyTokenForServices = (req, res) => {
   const { token } = req.body;
@@ -189,7 +284,6 @@ const verifyTokenForServices = (req, res) => {
     return res.status(400).json({ valid: false, error: 'Token is required' });
   }
 
-  const { verifyToken } = require('../utils/auth');
   const decoded = verifyToken(token);
 
   if (!decoded) {
@@ -248,6 +342,7 @@ module.exports = {
   getMe,
   logout,
   verify2FALogin,
+  resend2FALogin,
   verifyTokenForServices,
   getUserById,
 };

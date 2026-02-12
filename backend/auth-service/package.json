@@ -6,8 +6,16 @@
     "start": "node index.js"
   },
   "dependencies": {
-  "fastify": "^4.25.0",
-  "@fastify/jwt": "^6.7.1"
-}
+    "@fastify/jwt": "^6.7.1",
+    "@fastify/express": "^3.0.0",
+    "bcryptjs": "^2.4.3",
+    "express": "^4.19.2",
+    "fastify": "^4.25.0",
+    "jsonwebtoken": "^9.0.2",
+    "nodemailer": "^6.9.15",
+    "pg": "^8.18.0",
+    "speakeasy": "^2.0.0",
+    "uuid": "^9.0.1"
+  }
 
 }

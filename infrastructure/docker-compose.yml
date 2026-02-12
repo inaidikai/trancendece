@@ -1,8 +1,15 @@
 services:
   auth-service:
     build: ../backend/auth-service
+    env_file:
+      - ../.env
     environment:
       - JWT_SECRET=dev-super-secret-change-me
+      - PGHOST=postgres
+      - PGPORT=5432
+      - PGUSER=postgres
+      - PGPASSWORD=postgres
+      - PGDATABASE=auth_db
     expose:
       - "8000"
     networks:
@@ -17,10 +24,21 @@ services:
 
   diary-service:
     build: ../backend/diary-service
+    environment:
+      - PORT=8002
+      - JWT_SECRET=dev-super-secret-change-me
+      - PGHOST=postgres
+      - PGPORT=5432
+      - PGUSER=postgres
+      - PGPASSWORD=postgres
+      - PGDATABASE=auth_db
+      - WS_SERVER_URL=http://realtime-service:8003
     expose:
       - "8002"
     networks:
       - internal
+    depends_on:
+      - postgres
 
   realtime-service:
     build: ../backend/realtime-service
