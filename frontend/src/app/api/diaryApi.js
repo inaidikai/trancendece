@@ -2,9 +2,33 @@ import { getToken } from "../../auth/authApi";
 
 const API_BASE = (import.meta.env?.VITE_API_URL || "/api").replace(/\/$/, "");
 
+function looksLikeHtmlDocument(value = "") {
+  const trimmed = String(value).trim();
+  if (!trimmed) return false;
+  return (
+    /^<!doctype html/i.test(trimmed) ||
+    /^<html[\s>]/i.test(trimmed) ||
+    /^<head[\s>]/i.test(trimmed) ||
+    /^<body[\s>]/i.test(trimmed) ||
+    /<html[\s>]/i.test(trimmed)
+  );
+}
+
 async function parseResponse(response) {
   const text = await response.text();
   if (!text) return {};
+  const contentType = response.headers.get("content-type") || "";
+  const isJson = contentType.includes("application/json");
+  if (isJson) {
+    try {
+      return JSON.parse(text);
+    } catch {
+      return { message: "Invalid JSON response from server" };
+    }
+  }
+  if (looksLikeHtmlDocument(text)) {
+    return { message: "Gateway rejected the request payload. Please try again." };
+  }
   try {
     return JSON.parse(text);
   } catch {
@@ -26,7 +50,13 @@ export async function diaryRequest(path, { method = "GET", body, headers } = {})
 
   const data = await parseResponse(response);
   if (!response.ok) {
-    const error = new Error(data?.error || data?.message || "Request failed");
+    const errorMessage =
+      data?.error ||
+      data?.message ||
+      (response.status === 413
+        ? "Request payload too large. Please reduce content size and try again."
+        : "Request failed");
+    const error = new Error(errorMessage);
     error.status = response.status;
     error.data = data;
     throw error;

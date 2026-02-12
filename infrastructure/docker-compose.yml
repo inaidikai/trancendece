@@ -34,6 +34,7 @@ services:
       - PGPASSWORD=postgres
       - PGDATABASE=auth_db
       - WS_SERVER_URL=http://realtime-service:8003
+      - DIARY_REQUEST_BODY_LIMIT=10mb
     expose:
       - "8002"
     networks:

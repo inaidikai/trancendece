@@ -14,6 +14,7 @@ const dashboardRoutes = require('./routes/dashboard');
 const app = express();
 const DB_RETRY_ATTEMPTS = Number(process.env.DB_RETRY_ATTEMPTS || 30);
 const DB_RETRY_DELAY_MS = Number(process.env.DB_RETRY_DELAY_MS || 2000);
+const REQUEST_BODY_LIMIT = process.env.DIARY_REQUEST_BODY_LIMIT || '10mb';
 const DEFAULT_ALLOWED_ORIGINS = ['http://localhost:5173', 'http://127.0.0.1:5173'];
 
 function normalizeOrigin(origin) {
@@ -73,8 +74,8 @@ async function waitForDatabaseReady() {
 // Middleware
 app.use(cors(corsOptions));
 app.options('*', cors(corsOptions));
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: REQUEST_BODY_LIMIT }));
+app.use(express.urlencoded({ extended: true, limit: REQUEST_BODY_LIMIT }));
 
 // Health check
 app.get('/health', (req, res) => {
