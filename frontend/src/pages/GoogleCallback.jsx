@@ -10,11 +10,14 @@ export default function GoogleCallback() {
     handleGoogleCallback()
       .then((result) => {
         console.log('Auth successful:', result);
+        console.log('Navigating to /world...');
         navigate('/world', { replace: true });
       })
       .catch((error) => {
         console.error('Auth failed:', error);
-        setError(error.message);
+        const errorMsg = error?.message || error?.error || String(error);
+        setError(errorMsg);
+        console.log('Will redirect to /login in 3 seconds');
         setTimeout(() => navigate('/login', { replace: true }), 3000);
       });
   }, [navigate]);

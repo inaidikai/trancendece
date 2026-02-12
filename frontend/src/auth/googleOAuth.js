@@ -27,27 +27,36 @@ export async function handleGoogleCallback() {
     const code = params.get('code');
     const state = params.get('state');
     
+    console.log('GoogleCallback - Code:', code?.substring(0, 20) + '...');
+    console.log('GoogleCallback - State:', state?.substring(0, 20) + '...');
+    console.log('GoogleCallback - API_BASE:', API_BASE);
+    
     if (!code) {
       throw new Error('No authorization code received from Google');
     }
 
-    const response = await fetch(`${API_BASE}/auth/google/callback`, {
+    const callbackUrl = `${API_BASE}/auth/google/callback`;
+    console.log('Calling endpoint:', callbackUrl);
+    
+    const response = await fetch(callbackUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ code, state })
     });
 
+    console.log('Response status:', response.status);
+    
     const data = await response.json();
+    console.log('Response data:', data);
 
     if (!response.ok) {
-      throw {
-        status: response.status,
-        message: data.error || 'Google authentication failed'
-      };
+      throw new Error(data.error || data.message || 'Google authentication failed');
     }
 
+    console.log('Setting token:', data.token?.substring(0, 20) + '...');
     setToken(data.token, { remember: true });
 
+    console.log('Auth successful, user:', data.user);
     return {
       success: true,
       user: data.user,
