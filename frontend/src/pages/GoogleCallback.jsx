@@ -10,7 +10,7 @@ export default function GoogleCallback() {
     handleGoogleCallback()
       .then((result) => {
         console.log('Auth successful:', result);
-        navigate('/dashboard', { replace: true });
+        navigate('/world', { replace: true });
       })
       .catch((error) => {
         console.error('Auth failed:', error);

@@ -336,6 +336,214 @@ const getUserById = (req, res) => {
   });
 };
 
+// ==================== GOOGLE OAUTH FUNCTIONS ====================
+
+/**
+ * Initiates Google OAuth flow - returns Google authorization URL
+ * Frontend redirects user to this URL
+ */
+const googleAuthInit = (req, res) => {
+  const clientId = process.env.GOOGLE_CLIENT_ID;
+  const redirectUri = process.env.GOOGLE_REDIRECT_URI || 'http://localhost:8081/auth/google/callback';
+  
+  if (!clientId) {
+    return res.status(500).json({ error: 'Google OAuth not configured' });
+  }
+
+  // Generate state token for CSRF protection
+  const crypto = require('crypto');
+  const state = crypto.randomBytes(32).toString('hex');
+  
+  // Store state in session/cache (you can use Redis or memory cache)
+  // For now, we'll return it to frontend to send back
+  const googleAuthUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
+  googleAuthUrl.searchParams.append('client_id', clientId);
+  googleAuthUrl.searchParams.append('redirect_uri', redirectUri);
+  googleAuthUrl.searchParams.append('response_type', 'code');
+  googleAuthUrl.searchParams.append('scope', 'openid email profile');
+  googleAuthUrl.searchParams.append('state', state);
+  googleAuthUrl.searchParams.append('access_type', 'offline');
+  googleAuthUrl.searchParams.append('prompt', 'consent');
+
+  res.json({
+    message: 'Google OAuth URL generated',
+    authUrl: googleAuthUrl.toString(),
+    state: state
+  });
+};
+
+/**
+ * Google OAuth callback - exchanges authorization code for user info
+ * Called after user grants permission on Google's servers
+ */
+const googleAuthCallback = async (req, res) => {
+  const { code, state } = req.body;
+  
+  if (!code || !state) {
+    return res.status(400).json({ error: 'Missing code or state parameter' });
+  }
+
+  const clientId = process.env.GOOGLE_CLIENT_ID;
+  const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+  const redirectUri = process.env.GOOGLE_REDIRECT_URI || 'http://localhost:8081/auth/google/callback';
+
+  if (!clientId || !clientSecret) {
+    return res.status(500).json({ error: 'Google OAuth not configured' });
+  }
+
+  try {
+    const axios = require('axios');
+
+    // Step 1: Exchange authorization code for tokens
+    const tokenResponse = await axios.post('https://oauth2.googleapis.com/token', {
+      client_id: clientId,
+      client_secret: clientSecret,
+      code: code,
+      grant_type: 'authorization_code',
+      redirect_uri: redirectUri
+    });
+
+    const { access_token, id_token } = tokenResponse.data;
+
+    // Step 2: Get user info from Google
+    const userInfoResponse = await axios.get('https://www.googleapis.com/oauth2/v1/userinfo', {
+      headers: { Authorization: `Bearer ${access_token}` }
+    });
+
+    const googleUser = userInfoResponse.data;
+    const { email, name, picture, sub: googleId } = googleUser;
+
+    if (!email) {
+      return res.status(400).json({ error: 'Unable to retrieve email from Google' });
+    }
+
+    // Step 3: Check if user exists in our database
+    const query = 'SELECT * FROM users WHERE email = $1 OR google_id = $2';
+    db.get(query, [email.toLowerCase(), googleId], async (err, user) => {
+      if (err) {
+        return res.status(500).json({ error: 'Database error' });
+      }
+
+      // Step 4a: User exists - update OAuth info and login
+      if (user) {
+        // Update Google OAuth info
+        const updateQuery = `
+          UPDATE users 
+          SET google_id = $1, oauth_provider = 'google', updated_at = NOW()
+          WHERE id = $2
+        `;
+        db.run(updateQuery, [googleId, user.id], (updateErr) => {
+          if (updateErr) {
+            console.error('Update error:', updateErr.message);
+            return res.status(500).json({ error: 'Database error during update' });
+          }
+
+          // Generate JWT token
+          const token = generateToken(user.id);
+          res.json({
+            message: 'Login successful via Google',
+            user: {
+              id: user.id,
+              email: user.email,
+              username: user.username,
+              full_name: user.full_name,
+              avatar_url: user.avatar_url || picture,
+            },
+            token,
+            isNewUser: false
+          });
+        });
+        return;
+      }
+
+      // Step 4b: New user - create account
+      const userId = generateId();
+      const username = email.split('@')[0] + '_' + Math.random().toString(36).substr(2, 5);
+
+      const insertQuery = `
+        INSERT INTO users (id, email, username, full_name, avatar_url, google_id, oauth_provider, password_hash, created_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
+      `;
+
+      // Google OAuth users don't have passwords initially
+      db.run(insertQuery, [userId, email.toLowerCase(), username, name, picture, googleId, 'google', null], (insertErr) => {
+        if (insertErr) {
+          console.error('Insert error:', insertErr.message);
+          if (insertErr.message.includes('UNIQUE')) {
+            return res.status(409).json({ error: 'Email or username already exists' });
+          }
+          return res.status(500).json({ error: 'Database error during user creation' });
+        }
+
+        // Generate JWT token
+        const token = generateToken(userId);
+        res.status(201).json({
+          message: 'User created and logged in successfully via Google',
+          user: {
+            id: userId,
+            email: email.toLowerCase(),
+            username: username,
+            full_name: name,
+            avatar_url: picture,
+          },
+          token,
+          isNewUser: true
+        });
+      });
+    });
+
+  } catch (error) {
+    console.error('Google OAuth error:', error.message);
+    res.status(500).json({ 
+      error: 'Google authentication failed',
+      details: error.message 
+    });
+  }
+};
+
+/**
+ * Google OAuth redirect handler (GET)
+ * Redirects browser to frontend callback route with code/state
+ */
+const googleAuthRedirect = (req, res) => {
+  const { code, state } = req.query || {};
+  const frontendBase = (process.env.FRONTEND_URL || 'http://localhost:5173').replace(/\/+$/, '');
+  const redirectUrl = new URL('/auth/google/callback', frontendBase);
+
+  if (code) redirectUrl.searchParams.set('code', code);
+  if (state) redirectUrl.searchParams.set('state', state);
+
+  return res.redirect(redirectUrl.toString());
+};
+
+/**
+ * Link Google account to existing user
+ * For authenticated users wanting to add Google login
+ */
+const linkGoogleAccount = (req, res) => {
+  const userId = req.user.userId;
+  const { googleId } = req.body;
+
+  if (!googleId) {
+    return res.status(400).json({ error: 'Google ID is required' });
+  }
+
+  const query = `
+    UPDATE users 
+    SET google_id = $1, oauth_provider = 'google'
+    WHERE id = $2
+  `;
+
+  db.run(query, [googleId, userId], (err) => {
+    if (err) {
+      console.error('Link error:', err.message);
+      return res.status(500).json({ error: 'Failed to link Google account' });
+    }
+
+    res.json({ message: 'Google account linked successfully' });
+  });
+};
+
 module.exports = {
   register,
   login,
@@ -345,4 +553,8 @@ module.exports = {
   resend2FALogin,
   verifyTokenForServices,
   getUserById,
+  googleAuthInit,
+  googleAuthCallback,
+  googleAuthRedirect,
+  linkGoogleAccount,
 };

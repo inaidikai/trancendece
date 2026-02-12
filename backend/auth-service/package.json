@@ -8,6 +8,7 @@
   "dependencies": {
     "@fastify/jwt": "^6.7.1",
     "@fastify/express": "^3.0.0",
+    "axios": "^1.6.2",
     "bcryptjs": "^2.4.3",
     "express": "^4.19.2",
     "fastify": "^4.25.0",
