@@ -8,6 +8,8 @@ router.use(authenticateToken);
 router.get('/', EntriesController.getEntries);
 router.post('/', EntriesController.createEntry);
 router.get('/:id', EntriesController.getEntry);
+// WAF-safe update path for clients/proxies that block PUT verbs.
+router.post('/:id/update', EntriesController.updateEntry);
 router.put('/:id', EntriesController.updateEntry);
 router.delete('/:id', EntriesController.deleteEntry);
 

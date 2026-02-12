@@ -1,11 +1,15 @@
 const pool = require('../db/connection');
 const NotificationService = require('../services/notificationService');
+const crypto = require('crypto');
 
 class CollaboratorsController {
   // Get collaborators for an entry
   static async getCollaborators(req, res) {
     const { entryId } = req.params;
-    const userId = req.user.userId;
+    const userId = req.user.userId || req.user.id;
+    if (!userId) {
+      return res.status(401).json({ error: 'Invalid token payload' });
+    }
 
     try {
       // Check if user has access to this entry
@@ -33,7 +37,7 @@ class CollaboratorsController {
           u.id as user_id,
           u.username,
           u.full_name,
-          u.avatar,
+          COALESCE(to_jsonb(u)->>'avatar_url', to_jsonb(u)->>'avatar') as avatar,
           inviter.username as invited_by_username,
           EXISTS(
             SELECT 1 FROM ws_connections 
@@ -60,7 +64,10 @@ class CollaboratorsController {
   // Invite user to collaborate
   static async inviteCollaborator(req, res) {
     const { entryId } = req.params;
-    const userId = req.user.userId;
+    const userId = req.user.userId || req.user.id;
+    if (!userId) {
+      return res.status(401).json({ error: 'Invalid token payload' });
+    }
     const { collaboratorId, role = 'editor' } = req.body;
 
     if (!collaboratorId) {
@@ -106,10 +113,10 @@ class CollaboratorsController {
 
       // Create invitation
       const result = await pool.query(
-        `INSERT INTO collaborators (entry_id, user_id, role, invited_by, status)
-         VALUES ($1, $2, $3, $4, 'pending')
+        `INSERT INTO collaborators (id, entry_id, user_id, role, invited_by, status)
+         VALUES ($1, $2, $3, $4, $5, 'pending')
          RETURNING *`,
-        [entryId, collaboratorId, role, userId]
+        [crypto.randomUUID(), entryId, collaboratorId, role, userId]
       );
 
       const invitation = result.rows[0];
@@ -157,7 +164,10 @@ class CollaboratorsController {
 
   // Get my collaboration invites
   static async getMyInvites(req, res) {
-    const userId = req.user.userId;
+    const userId = req.user.userId || req.user.id;
+    if (!userId) {
+      return res.status(401).json({ error: 'Invalid token payload' });
+    }
 
     try {
       const result = await pool.query(
@@ -171,7 +181,7 @@ class CollaboratorsController {
           inviter.id as inviter_id,
           inviter.username as inviter_username,
           inviter.full_name as inviter_name,
-          inviter.avatar as inviter_avatar
+          COALESCE(to_jsonb(inviter)->>'avatar_url', to_jsonb(inviter)->>'avatar') as inviter_avatar
          FROM collaborators c
          JOIN diary_entries e ON c.entry_id = e.id
          JOIN users inviter ON c.invited_by = inviter.id
@@ -192,7 +202,10 @@ class CollaboratorsController {
 
   // Accept collaboration invite
   static async acceptInvite(req, res) {
-    const userId = req.user.userId;
+    const userId = req.user.userId || req.user.id;
+    if (!userId) {
+      return res.status(401).json({ error: 'Invalid token payload' });
+    }
     const { inviteId } = req.params;
 
     try {
@@ -257,7 +270,10 @@ class CollaboratorsController {
 
   // Decline collaboration invite
   static async declineInvite(req, res) {
-    const userId = req.user.userId;
+    const userId = req.user.userId || req.user.id;
+    if (!userId) {
+      return res.status(401).json({ error: 'Invalid token payload' });
+    }
     const { inviteId } = req.params;
 
     try {
@@ -282,27 +298,44 @@ class CollaboratorsController {
 
   // Remove collaborator
   static async removeCollaborator(req, res) {
-    const userId = req.user.userId;
+    const userId = req.user.userId || req.user.id;
+    if (!userId) {
+      return res.status(401).json({ error: 'Invalid token payload' });
+    }
     const { entryId, collaboratorId } = req.params;
 
     try {
-      // Check if user is owner
-      const ownerCheck = await pool.query(
-        `SELECT 1 FROM diary_entries WHERE id = $1 AND owner_id = $2`,
-        [entryId, userId]
+      const entryResult = await pool.query(
+        `SELECT owner_id FROM diary_entries WHERE id = $1`,
+        [entryId]
       );
 
-      if (ownerCheck.rows.length === 0) {
+      if (entryResult.rows.length === 0) {
+        return res.status(404).json({ error: 'Entry not found' });
+      }
+
+      const ownerId = entryResult.rows[0].owner_id;
+      const isOwnerAction = String(ownerId) === String(userId);
+      const isSelfLeave = String(collaboratorId) === String(userId);
+
+      if (!isOwnerAction && !isSelfLeave) {
         return res.status(403).json({ error: 'Only owner can remove collaborators' });
       }
 
-      // Remove collaborator
-      await pool.query(
-        `DELETE FROM collaborators WHERE entry_id = $1 AND user_id = $2`,
+      if (isOwnerAction && isSelfLeave) {
+        return res.status(400).json({ error: 'Owner cannot leave their own diary' });
+      }
+
+      const result = await pool.query(
+        `DELETE FROM collaborators WHERE entry_id = $1 AND user_id = $2 RETURNING id`,
         [entryId, collaboratorId]
       );
 
-      res.json({ message: 'Collaborator removed' });
+      if (result.rows.length === 0) {
+        return res.status(404).json({ error: 'Collaborator not found' });
+      }
+
+      res.json({ message: isSelfLeave ? 'Left collaboration' : 'Collaborator removed' });
     } catch (error) {
       console.error('Remove collaborator error:', error);
       res.status(500).json({ error: 'Failed to remove collaborator' });
@@ -311,7 +344,10 @@ class CollaboratorsController {
 
   // Update collaborator permissions
   static async updatePermissions(req, res) {
-    const userId = req.user.userId;
+    const userId = req.user.userId || req.user.id;
+    if (!userId) {
+      return res.status(401).json({ error: 'Invalid token payload' });
+    }
     const { entryId, collaboratorId } = req.params;
     const { role } = req.body;
 

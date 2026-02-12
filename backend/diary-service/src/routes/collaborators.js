@@ -5,6 +5,13 @@ const CollaboratorsController = require('../controllers/collaboratorsController'
 
 router.use(authenticateToken);
 
+// Entry collaborators
+router.get('/entries/:entryId', CollaboratorsController.getCollaborators);
+router.post('/entries/:entryId/invite', CollaboratorsController.inviteCollaborator);
+router.delete('/entries/:entryId/users/:collaboratorId', CollaboratorsController.removeCollaborator);
+router.post('/entries/:entryId/users/:collaboratorId/remove', CollaboratorsController.removeCollaborator);
+router.patch('/entries/:entryId/users/:collaboratorId', CollaboratorsController.updatePermissions);
+
 // Get my collaboration invites
 router.get('/invites', CollaboratorsController.getMyInvites);
 

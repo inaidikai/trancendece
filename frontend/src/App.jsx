@@ -1,13 +1,17 @@
 import React from "react";
-import { Routes, Route, Navigate, Link } from "react-router-dom";
+import { Routes, Route, Navigate } from "react-router-dom";
 
-import Login from "./pages/Login.jsx";
+import { AuthRoutes } from "./auth";
 import Dashboard from "./pages/Dashboard.jsx";
 import World from "./pages/World.jsx";
+import FlipbookHome from "./pages/FlipbookHome.jsx";
 import DiaryEditor from "./pages/DiaryEditor.jsx";
+import PrivacyPolicy from "./pages/PrivacyPolicy.jsx";
+import Terms from "./pages/Terms.jsx";
+import { getToken } from "./auth/authApi";
 
 function RequireAuth({ children }) {
-  const token = localStorage.getItem("token");
+  const token = getToken();
   return token ? children : <Navigate to="/login" replace />;
 }
 
@@ -15,7 +19,15 @@ export default function App() {
   return (
     <div style={{ height: "100vh" }}>
       <Routes>
-        <Route path="/login" element={<Login />} />
+        <Route path="/login" element={<AuthRoutes initial="login" />} />
+        <Route path="/signup" element={<AuthRoutes initial="signup" />} />
+        <Route path="/forgot-password" element={<AuthRoutes initial="forgot-password" />} />
+        <Route path="/reset-password" element={<AuthRoutes initial="reset-password" />} />
+        <Route path="/verify-2fa" element={<AuthRoutes initial="verify-2fa" />} />
+        <Route path="/create-profile" element={<AuthRoutes initial="create-profile" />} />
+        <Route path="/auth/*" element={<AuthRoutes initial="login" />} />
+        <Route path="/privacy" element={<PrivacyPolicy />} />
+        <Route path="/terms" element={<Terms />} />
 
         <Route
           path="/dashboard"
@@ -36,6 +48,24 @@ export default function App() {
         />
 
         <Route
+          path="/home"
+          element={
+            <RequireAuth>
+              <FlipbookHome />
+            </RequireAuth>
+          }
+        />
+
+        <Route
+          path="/edit/:id"
+          element={
+            <RequireAuth>
+              <FlipbookHome />
+            </RequireAuth>
+          }
+        />
+
+        <Route
           path="/diary/:id"
           element={
             <RequireAuth>
@@ -44,13 +74,8 @@ export default function App() {
           }
         />
 
-        <Route path="*" element={<Navigate to="/dashboard" replace />} />
+        <Route path="*" element={<Navigate to="/world" replace />} />
       </Routes>
-
-      {/* tiny nav for testing */}
-      <div style={{ position: "fixed", bottom: 10, right: 10, opacity: 0.7 }}>
-        <Link to="/dashboard">Dashboard</Link> | <Link to="/world">World</Link>
-      </div>
     </div>
   );
 }

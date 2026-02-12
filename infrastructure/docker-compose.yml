@@ -1,8 +1,15 @@
 services:
   auth-service:
     build: ../backend/auth-service
+    env_file:
+      - ../.env
     environment:
       - JWT_SECRET=dev-super-secret-change-me
+      - PGHOST=postgres
+      - PGPORT=5432
+      - PGUSER=postgres
+      - PGPASSWORD=postgres
+      - PGDATABASE=auth_db
     expose:
       - "8000"
     networks:
@@ -17,15 +24,29 @@ services:
 
   diary-service:
     build: ../backend/diary-service
+    environment:
+      - PORT=8002
+      - JWT_SECRET=dev-super-secret-change-me
+      - CORS_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
+      - PGHOST=postgres
+      - PGPORT=5432
+      - PGUSER=postgres
+      - PGPASSWORD=postgres
+      - PGDATABASE=auth_db
+      - WS_SERVER_URL=http://realtime-service:8003
+      - DIARY_REQUEST_BODY_LIMIT=10mb
     expose:
       - "8002"
     networks:
       - internal
+    depends_on:
+      - postgres
 
   realtime-service:
     build: ../backend/realtime-service
     environment:
       - JWT_SECRET=dev-super-secret-change-me
+      - CORS_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
       - PGHOST=postgres
       - PGPORT=5432
       - PGUSER=postgres
@@ -49,6 +70,7 @@ services:
       - realtime-service
     environment:
       - JWT_SECRET=dev-super-secret-change-me
+      - CORS_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
     ports:
       - "8080:8080"
     networks:
@@ -64,6 +86,7 @@ services:
       - ../backend/waf/config/default.conf:/etc/nginx/templates/conf.d/default.conf.template:ro
     environment:
       - BACKEND=http://api-gateway:8080
+      - WS_BACKEND=http://realtime-service:8003
       - PARANOIA=1
     depends_on:
       - api-gateway

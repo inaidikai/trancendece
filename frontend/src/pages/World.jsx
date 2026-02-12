@@ -7,13 +7,24 @@ import { Sky, Text, useGLTF, PointerLockControls } from "@react-three/drei";
 import { CuboidCollider } from "@react-three/rapier";
 import { useRapier } from "@react-three/rapier";
 import { useAnimations } from "@react-three/drei";
-import { makeSocket } from "../socket";
 
 import { Water } from "three-stdlib";
 import { useThree } from "@react-three/fiber";
 import * as THREE from "three";
 import { Environment } from "@react-three/drei";
 
+import DashboardPlaceholder from "../auth/pages/DashboardPlaceholder";
+import AuthButton from "../auth/components/AuthButton";
+import "../auth/auth.css";
+import "../auth/components/authComponents.css";
+
+const SOFTWARE_RENDERER_PATTERN = /(llvmpipe|swiftshader|software)/i;
+const WEBGL_CONTEXT_PROFILES = [
+  { antialias: true, powerPreference: "high-performance" },
+  { antialias: true, powerPreference: "default" },
+  { antialias: false, powerPreference: "default" },
+  {},
+];
 
 function lerpAngle(a, b, t) {
   // shortest signed angular difference, in [-PI, PI]
@@ -112,6 +123,141 @@ function useUnifiedInput(isMobile) {
   };
 
   return { input, consumeLook };
+}
+
+function detectWebGLStatus() {
+  if (typeof window === "undefined") {
+    return { available: true, rendererName: "", softwareRenderer: false, reason: "" };
+  }
+
+  try {
+    if (!window.WebGLRenderingContext && !window.WebGL2RenderingContext) {
+      return {
+        available: false,
+        rendererName: "",
+        softwareRenderer: false,
+        reason: "WebGL API is disabled in this browser.",
+      };
+    }
+
+    const canvas = document.createElement("canvas");
+    let gl = null;
+    let lastProfile = null;
+
+    for (const profile of WEBGL_CONTEXT_PROFILES) {
+      lastProfile = profile;
+      gl =
+        canvas.getContext("webgl2", profile) ||
+        canvas.getContext("webgl", profile) ||
+        canvas.getContext("experimental-webgl", profile);
+      if (gl) break;
+    }
+
+    if (!gl) {
+      return {
+        available: false,
+        rendererName: "",
+        softwareRenderer: false,
+        reason: `Context creation failed${lastProfile ? " for all fallback profiles" : ""}.`,
+      };
+    }
+
+    let rendererName = "";
+    try {
+      const debugInfo = gl.getExtension("WEBGL_debug_renderer_info");
+      rendererName = debugInfo
+        ? String(gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL) || "")
+        : String(gl.getParameter(gl.RENDERER) || "");
+    } catch {
+      rendererName = "";
+    }
+
+    return {
+      available: true,
+      rendererName,
+      softwareRenderer: SOFTWARE_RENDERER_PATTERN.test(rendererName),
+      reason: "",
+    };
+  } catch {
+    return {
+      available: false,
+      rendererName: "",
+      softwareRenderer: false,
+      reason: "Context creation threw a runtime exception.",
+    };
+  }
+}
+
+function WebGLFallback({ onOpenDiary, onTryAnyway, reason }) {
+  return (
+    <div
+      style={{
+        position: "absolute",
+        inset: 0,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        background:
+          "linear-gradient(180deg, rgba(6,23,39,0.98) 0%, rgba(10,10,12,0.98) 100%)",
+        padding: 24,
+      }}
+    >
+      <div
+        style={{
+          width: "min(560px, 100%)",
+          borderRadius: 14,
+          border: "1px solid rgba(255,255,255,0.18)",
+          background: "rgba(0,0,0,0.45)",
+          color: "white",
+          padding: 20,
+        }}
+      >
+        <h3 style={{ margin: 0, marginBottom: 10 }}>WebGL is unavailable in this browser</h3>
+        <p style={{ margin: 0, opacity: 0.9, lineHeight: 1.45 }}>
+          Chrome could not initialize GPU rendering, so the 3D world is disabled for now.
+          Enable hardware acceleration, restart Chrome, then reload this page.
+        </p>
+        {reason ? (
+          <p style={{ marginTop: 10, marginBottom: 0, opacity: 0.75, fontSize: 12 }}>
+            Detected reason: {reason}
+          </p>
+        ) : null}
+        <div style={{ marginTop: 16, display: "flex", gap: 10, flexWrap: "wrap" }}>
+          <AuthButton onClick={onOpenDiary}>Open Diary</AuthButton>
+          <AuthButton onClick={onTryAnyway}>Try anyway</AuthButton>
+          <AuthButton onClick={() => window.location.reload()}>Retry WebGL</AuthButton>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+class WorldCanvasErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error) {
+    this.props.onError?.(error);
+  }
+
+  componentDidUpdate(prevProps) {
+    if (prevProps.resetKey !== this.props.resetKey && this.state.hasError) {
+      this.setState({ hasError: false });
+    }
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return this.props.fallback;
+    }
+    return this.props.children;
+  }
 }
 
 const AnimalModel = React.forwardRef(function AnimalModel({ state }, ref) {
@@ -676,44 +822,59 @@ export default function World() {
   const nav = useNavigate();
   const isMobile = useIsMobile();
   const { input, consumeLook } = useUnifiedInput(isMobile);
+  const [webglStatus, setWebglStatus] = useState(() => detectWebGLStatus());
+  const [forceWebGLAttempt, setForceWebGLAttempt] = useState(false);
+  const [canvasError, setCanvasError] = useState(null);
+  const [canvasResetKey, setCanvasResetKey] = useState(0);
+  const dashboardNavigate = useCallback(
+    (target) => {
+      if (target === "login") {
+        nav("/login");
+        return;
+      }
+      if (target === "dashboard") {
+        nav("/world");
+        return;
+      }
+      if (target) {
+        nav(`/${target}`);
+      }
+    },
+    [nav]
+  );
 
   const [books, setBooks] = useState([{ id: "1", pos: [1, 1.0, 7] }]);
   const [prompt, setPrompt] = useState(null);
+  const sceneLockRef = useRef(null);
   const frogPos = useMemo(() => [10, 0.7, -3], []);
   const minionAudioRef = useRef(null);
   const ambientAudioRef = useRef(null);
   const chickAudioRef = useRef(null);
   const audioUnlockedRef = useRef(false);
   const frogNearRef = useRef(false);
+  const pendingFrogSoundRef = useRef(false);
+  const pendingChickSoundRef = useRef(false);
   const lastMoveSoundAtRef = useRef(0);
   const lastPosRef = useRef(null);
-  
+
   useEffect(() => {
-  const s = makeSocket();
+    const status = detectWebGLStatus();
+    setWebglStatus(status);
+  }, []);
 
-  console.log("socket token exists?", !!localStorage.getItem("token"));
+  const shouldRenderWebGL = (webglStatus.available || forceWebGLAttempt) && !canvasError;
+  const fallbackReason = canvasError?.message || webglStatus.reason;
 
-  s.on("connect", () => console.log("socket connected", s.id));
-  s.on("ready", (msg) => console.log("ready", msg));
-  s.on("pong", () => console.log("pong"));
-  s.on("connect_error", (e) =>
-    console.log("connect_error", e?.message || e)
-  );
-
-  // quick test ping after connect
-  s.on("connect", () => {
-    s.emit("ping");
-  });
-
-  return () => {
-    s.disconnect();
-  };
-}, []);
-
+  const retryWebGLAttempt = useCallback(() => {
+    setCanvasError(null);
+    setForceWebGLAttempt(true);
+    setCanvasResetKey((value) => value + 1);
+  }, []);
+  
   useEffect(() => {
     const minion = new Audio("/sfx/minion-speaking-made-with-Voicemod.mp3");
     minion.preload = "auto";
-    minion.volume = 0.2;
+    minion.volume = 0.7;
     minionAudioRef.current = minion;
 
     const ambient = new Audio(
@@ -721,13 +882,19 @@ export default function World() {
     );
     ambient.preload = "auto";
     ambient.loop = true;
-    ambient.volume = 0.8;
+    ambient.volume = 0.35;
+    // Try audible autoplay first. If blocked by browser policy,
+    // fall back to muted playback and unmute on first interaction.
+    ambient.muted = false;
     ambientAudioRef.current = ambient;
-    ambient.play().catch(() => {});
+    ambient.play().catch(() => {
+      ambient.muted = true;
+      ambient.play().catch(() => {});
+    });
 
     const chick = new Audio("/sfx/nikin-short-chick-sound-171389 (mp3cut.net).mp3");
     chick.preload = "auto";
-    chick.volume = 0.6;
+    chick.volume = 0.95;
     chickAudioRef.current = chick;
 
     return () => {
@@ -738,28 +905,74 @@ export default function World() {
   }, []);
 
   const unlockAudio = useCallback(() => {
-    if (audioUnlockedRef.current) return;
+    const wasUnlocked = audioUnlockedRef.current;
     audioUnlockedRef.current = true;
     const ambient = ambientAudioRef.current;
-    if (ambient && ambient.paused) {
-      ambient.play().catch(() => {});
+    if (ambient) {
+      ambient.muted = false;
+      if (ambient.paused) {
+        ambient.play().catch(() => {});
+      }
+    }
+    if (wasUnlocked) return;
+
+    if (frogNearRef.current && pendingFrogSoundRef.current) {
+      const minion = minionAudioRef.current;
+      if (minion) {
+        minion.currentTime = 0;
+        minion.play().catch(() => {});
+        pendingFrogSoundRef.current = false;
+      }
+    }
+    if (pendingChickSoundRef.current) {
+      const chick = chickAudioRef.current;
+      if (chick) {
+        chick.currentTime = 0;
+        chick.play().catch(() => {});
+        lastMoveSoundAtRef.current = performance.now();
+      }
+      pendingChickSoundRef.current = false;
     }
   }, []);
 
+  useEffect(() => {
+    if (isMobile) return;
+    const unlockKeys = new Set([
+      "KeyW",
+      "KeyA",
+      "KeyS",
+      "KeyD",
+      "Space",
+      "KeyE",
+      "ArrowUp",
+      "ArrowDown",
+      "ArrowLeft",
+      "ArrowRight",
+    ]);
+    const handleKeydown = (event) => {
+      if (!unlockKeys.has(event.code)) return;
+      unlockAudio();
+    };
+    window.addEventListener("keydown", handleKeydown);
+    return () => window.removeEventListener("keydown", handleKeydown);
+  }, [isMobile, unlockAudio]);
+
   const playMinion = useCallback(() => {
-    if (!audioUnlockedRef.current) return;
+    if (!audioUnlockedRef.current) return false;
     const minion = minionAudioRef.current;
-    if (!minion) return;
+    if (!minion) return false;
     minion.currentTime = 0;
     minion.play().catch(() => {});
+    return true;
   }, []);
 
   const playChick = useCallback(() => {
-    if (!audioUnlockedRef.current) return;
+    if (!audioUnlockedRef.current) return false;
     const chick = chickAudioRef.current;
-    if (!chick) return;
+    if (!chick) return false;
     chick.currentTime = 0;
     chick.play().catch(() => {});
+    return true;
   }, []);
 
   // Debounce E so holding it doesn’t spam actions
@@ -779,8 +992,12 @@ export default function World() {
       const moving = Math.hypot(dx, dz) > 0.001;
       const due = lastMoveSoundAtRef.current === 0 || now - lastMoveSoundAtRef.current >= 35000;
       if (moving && due) {
-        lastMoveSoundAtRef.current = now;
-        playChick();
+        if (playChick()) {
+          lastMoveSoundAtRef.current = now;
+          pendingChickSoundRef.current = false;
+        } else {
+          pendingChickSoundRef.current = true;
+        }
       }
     }
     lastPosRef.current = { x: p.x, z: p.z };
@@ -790,8 +1007,11 @@ export default function World() {
       const d = Math.hypot(p.x - b.pos[0], p.y - b.pos[1], p.z - b.pos[2]);
       if (d < 1.6) {
         hit = {
-          text: isMobile ? `Tap Interact to open Book ${b.id}` : `Press E to open Book ${b.id}`,
-          go: () => nav(`/diary/${b.id}`),
+          text: isMobile
+            ? `Tap Interact or use Open Diary for Book ${b.id}`
+            : "Hi, want to make your space? Press E or use Open Diary",
+          actionLabel: "Open Diary",
+          go: () => nav("/home"),
         };
         break;
       }
@@ -803,15 +1023,18 @@ export default function World() {
       if (dFrog < 1.8) {
         if (!frogNearRef.current) {
           frogNearRef.current = true;
-          playMinion();
+          pendingFrogSoundRef.current = !playMinion();
         }
         hit = {
-          text: "Hi, want to make a journal with your friends?",
-          actionLabel: "Go to Diary",
-          go: () => nav("/diary/1"),
+          text: isMobile
+            ? "Use Open Diary."
+            : "Hi, want to make your space with your friends? Press E or Open Diary",
+          actionLabel: "Open Diary",
+          go: () => nav("/home?mode=collab"),
         };
       } else {
         frogNearRef.current = false;
+        pendingFrogSoundRef.current = false;
       }
     }
 
@@ -820,146 +1043,156 @@ export default function World() {
     if (hit && ePressed) hit.go();
   }
 
+  const requestScenePointerLock = useCallback(() => {
+    if (isMobile) return;
+    sceneLockRef.current?.requestPointerLock?.();
+  }, [isMobile]);
+
   return (
     <div
       style={{ height: "100dvh", width: "100vw" }}
-      onPointerDown={unlockAudio}
       onTouchStart={unlockAudio}
     >
-      <Canvas camera={{ fov: 50 }} style={{ height: "100%", width: "100%", display: "block" }}>
-          <Environment
-    files="/hdri/coffee_sky.hdr"
-    background
-    intensity={0.5}
-  />
+      <div
+        id="world-scene-lock-target"
+        ref={sceneLockRef}
+        style={{ position: "relative", height: "100%", width: "100%" }}
+        onPointerDown={() => {
+          unlockAudio();
+          if (shouldRenderWebGL) {
+            requestScenePointerLock();
+          }
+        }}
+      >
+        {shouldRenderWebGL ? (
+          <WorldCanvasErrorBoundary
+            resetKey={canvasResetKey}
+            onError={(error) => {
+              setCanvasError(error || new Error("Renderer initialization failed."));
+              setForceWebGLAttempt(false);
+            }}
+            fallback={
+              <WebGLFallback
+                onOpenDiary={() => nav("/home")}
+                onTryAnyway={retryWebGLAttempt}
+                reason={fallbackReason}
+              />
+            }
+          >
+            <Canvas
+              camera={{ fov: 50 }}
+              gl={{ antialias: false, powerPreference: "default" }}
+              fallback={
+                <WebGLFallback
+                  onOpenDiary={() => nav("/home")}
+                  onTryAnyway={retryWebGLAttempt}
+                  reason={fallbackReason}
+                />
+              }
+              style={{ height: "100%", width: "100%", display: "block" }}
+            >
+              <Environment
+                files="/hdri/coffee_sky.hdr"
+                background
+                intensity={0.5}
+              />
 
-  <ambientLight intensity={0.6} />
-  <directionalLight position={[5, 10, 5]} intensity={0.1} />
+              <ambientLight intensity={0.6} />
+              <directionalLight position={[5, 10, 5]} intensity={0.1} />
 
-  {!isMobile && <PointerLockControls />}
+              {!isMobile && <PointerLockControls selector="#world-scene-lock-target" />}
 
-  <Physics>
+              <Physics>
+                <Ocean y={-0.5} size={600} />
+                <BoundaryWalls />
 
-      <Ocean y={-0.5} size={600}  />
-      <BoundaryWalls />
+                {/* Coffee shop collision */}
+                <CoffeeShop position={[0, -0.3, 0]} scale={1} />
 
-    {/* Coffee shop collision */}
-    <CoffeeShop position={[0, -0.3, 0]} scale={1} />
+                {/* Magic frog */}
+                <MagicFrog position={frogPos} scale={0.2} />
 
-    {/* Magic frog */}
-    <MagicFrog position={frogPos} scale={0.2} />
+                {/* Interactive objects */}
+                {books.map((b) => (
+                  <Book key={b.id} pos={b.pos} label={`Book ${b.id}`} />
+                ))}
+                <RigidBody type="fixed" colliders={false}>
+                  <CuboidCollider args={[400, 0.5, 400]} position={[0, -1, 0]} />
+                </RigidBody>
 
-    {/* Interactive objects */}
-    {books.map((b) => (
-      <Book key={b.id} pos={b.pos} label={`Book ${b.id}`} />
-    ))}
-    <RigidBody type="fixed" colliders={false}>
-  <CuboidCollider args={[400, 0.5, 400]} position={[0, -1, 0]} />
-</RigidBody>
+                {/* Player */}
+                <Player onTick={tick} inputRef={input} consumeLook={consumeLook} />
+              </Physics>
+            </Canvas>
+          </WorldCanvasErrorBoundary>
+        ) : (
+          <WebGLFallback
+            onOpenDiary={() => nav("/home")}
+            onTryAnyway={retryWebGLAttempt}
+            reason={fallbackReason}
+          />
+        )}
+      </div>
 
-    {/* Player */}
-    <Player onTick={tick} inputRef={input} consumeLook={consumeLook} />
-  </Physics>
-</Canvas>
-
-{!isMobile && (
-<div 
- onClick={() => {
-  unlockAudio();
-  document.body.requestPointerLock?.();
-}}
-style={{
-  position: "fixed",
-  top: 12,
-  left: 12,
-  background: "rgba(0,0,0,0.6)",
-  color: "white",
-  padding: "10px 12px",
-  borderRadius: 12,
-  fontSize: 13
-}}>
-  Click to lock mouse • Move mouse to look • WASD to move • Esc to unlock
-</div>
-)}
+      {shouldRenderWebGL && !isMobile && (
+        <div className="world-controls-panel">
+          <div className="world-controls-grid">
+            <span className="world-controls-item">
+              <span className="world-controls-kbd">W A S D</span>
+              Move
+            </span>
+            <span className="world-controls-item">
+              <span className="world-controls-kbd">Space</span>
+              Jump
+            </span>
+            <span className="world-controls-item">
+              <span className="world-controls-kbd">Mouse</span>
+              Camera look
+            </span>
+            <span className="world-controls-item">
+              <span className="world-controls-kbd">E</span>
+              Interact / Open book
+            </span>
+            <span className="world-controls-item">
+              <span className="world-controls-kbd">Esc</span>
+              Exit camera mode
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* Responsive prompt */}
-      {prompt && (
-        <>
-          <div
-            style={{
-              position: "fixed",
-              bottom: 64,
-              left: "50%",
-              transform: "translateX(-50%)",
-              background: "rgba(0,0,0,0.7)",
-              color: "#fff",
-              padding: "10px 12px",
-              borderRadius: 12,
-              maxWidth: "min(520px, 92vw)",
-              textAlign: "center",
-              fontSize: 14,
-              pointerEvents: "none",
-            }}
-          >
-            {prompt.text}
-          </div>
+      {shouldRenderWebGL && prompt && (
+        <div className="world-context-prompt">
+          <div className="world-context-text">{prompt.text}</div>
           {prompt.actionLabel && (
-            <div
-              style={{
-                position: "fixed",
-                bottom: 16,
-                left: "50%",
-                transform: "translateX(-50%)",
-                pointerEvents: "auto",
-              }}
-            >
-              <button
-                onClick={prompt.go}
-                style={{
-                  display: "inline-block",
-                  padding: "8px 12px",
-                  borderRadius: 999,
-                  background: "rgba(255,255,255,0.9)",
-                  color: "#111",
-                  border: "none",
-                  fontSize: 13,
-                  cursor: "pointer",
+            <div className="world-context-action">
+              <AuthButton
+                onClick={() => {
+                  document.exitPointerLock?.();
+                  prompt.go();
                 }}
               >
                 {prompt.actionLabel}
-              </button>
+              </AuthButton>
             </div>
           )}
-        </>
+        </div>
       )}
 
-      {/* Tiny HUD */}
-      {!isMobile && (
-      <div
-        style={{
-          position: "fixed",
-          top: 12,
-          left: 12,
-          background: "rgba(0,0,0,0.55)",
-          color: "#fff",
-          padding: "10px 12px",
-          borderRadius: 12,
-          fontSize: 13,
-        }}
-      >
-        WASD to move • E to interact
-      </div>
-      )}
-
-      {isMobile && (
+      {shouldRenderWebGL && isMobile && (
         <MobileControls
           inputRef={input}
           showInteract={!!prompt}
         />
       )}
+
+      <div className="dashboard-overlay">
+        <div className="auth-root">
+          <DashboardPlaceholder navigate={dashboardNavigate} />
+        </div>
+      </div>
     </div>
 
   );
 }
-
-

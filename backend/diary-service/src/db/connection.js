@@ -1,8 +1,20 @@
 const { Pool } = require('pg');
 require('dotenv').config();
 
+const connectionOptions = process.env.DATABASE_URL
+  ? {
+      connectionString: process.env.DATABASE_URL,
+    }
+  : {
+      host: process.env.PGHOST || 'postgres',
+      port: Number(process.env.PGPORT || 5432),
+      user: process.env.PGUSER || 'postgres',
+      password: process.env.PGPASSWORD || 'postgres',
+      database: process.env.PGDATABASE || 'auth_db',
+    };
+
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL || 'postgresql://postgres:postgres@db:5432/lola',
+  ...connectionOptions,
   max: 20,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 2000,

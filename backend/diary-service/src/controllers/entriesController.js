@@ -1,5 +1,6 @@
 const pool = require('../db/connection');
 const NotificationService = require("../services/notificationService");
+const crypto = require('crypto');
 
 // returns array of userIds that should be notified (owner + accepted collaborators), excluding actor
 async function getEntryRecipients(entryId, actorId) {
@@ -32,7 +33,10 @@ async function getEntryRecipients(entryId, actorId) {
 class EntriesController {
   // Get user's entries
   static async getEntries(req, res) {
-    const userId = req.user.userId;
+    const userId = req.user.userId || req.user.id;
+    if (!userId) {
+      return res.status(401).json({ error: 'Invalid token payload' });
+    }
 
     try {
       const result = await pool.query(
@@ -64,7 +68,10 @@ class EntriesController {
 
   // Get specific entry
   static async getEntry(req, res) {
-    const userId = req.user.userId;
+    const userId = req.user.userId || req.user.id;
+    if (!userId) {
+      return res.status(401).json({ error: 'Invalid token payload' });
+    }
     const { id } = req.params;
 
     try {
@@ -114,7 +121,10 @@ class EntriesController {
 
   // Create new entry
   static async createEntry(req, res) {
-    const userId = req.user.userId;
+    const userId = req.user.userId || req.user.id;
+    if (!userId) {
+      return res.status(401).json({ error: 'Invalid token payload' });
+    }
     const username = req.user.username || "Someone";
     const { title, content = [], coverImage, isPrivate = true } = req.body;
 
@@ -123,11 +133,12 @@ class EntriesController {
     }
 
     try {
+      const entryId = crypto.randomUUID();
       const result = await pool.query(
-        `INSERT INTO diary_entries (owner_id, title, content, cover_image, is_private)
-         VALUES ($1, $2, $3, $4, $5)
+        `INSERT INTO diary_entries (id, owner_id, title, content, cover_image, is_private)
+         VALUES ($1, $2, $3, $4, $5, $6)
          RETURNING *`,
-        [userId, title, JSON.stringify(content), coverImage, isPrivate]
+        [entryId, userId, title, JSON.stringify(content), coverImage, isPrivate]
       );
 
       const entry = result.rows[0];
@@ -166,7 +177,10 @@ class EntriesController {
 
   // Update entry
   static async updateEntry(req, res) {
-    const userId = req.user.userId;
+    const userId = req.user.userId || req.user.id;
+    if (!userId) {
+      return res.status(401).json({ error: 'Invalid token payload' });
+    }
     const username = req.user.username || "Someone";
     const { id } = req.params;
     const { title, content, coverImage, isPrivate } = req.body;
@@ -261,7 +275,10 @@ class EntriesController {
 
   // Delete entry
   static async deleteEntry(req, res) {
-    const userId = req.user.userId;
+    const userId = req.user.userId || req.user.id;
+    if (!userId) {
+      return res.status(401).json({ error: 'Invalid token payload' });
+    }
     const username = req.user.username || "Someone";
     const { id } = req.params;
 

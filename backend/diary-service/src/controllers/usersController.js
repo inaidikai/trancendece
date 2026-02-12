@@ -7,8 +7,18 @@ class UsersController {
 
     try {
       const result = await pool.query(
-        `SELECT id, username, email, full_name, avatar, bio, created_at, last_seen
-         FROM users WHERE id = $1`,
+        `SELECT
+          u.id,
+          u.username,
+          u.email,
+          u.full_name,
+          COALESCE(to_jsonb(u)->>'avatar_url', to_jsonb(u)->>'avatar') AS avatar,
+          u.bio,
+          u.created_at,
+          w.last_seen
+         FROM users u
+         LEFT JOIN ws_connections w ON w.user_id = u.id
+         WHERE u.id = $1`,
         [userId]
       );
 
@@ -38,7 +48,7 @@ class UsersController {
         values.push(fullName);
       }
       if (avatar !== undefined) {
-        updates.push(`avatar = $${paramCount++}`);
+        updates.push(`avatar_url = $${paramCount++}`);
         values.push(avatar);
       }
       if (bio !== undefined) {
@@ -57,7 +67,7 @@ class UsersController {
         UPDATE users 
         SET ${updates.join(', ')}
         WHERE id = $${paramCount}
-        RETURNING id, username, email, full_name, avatar, bio
+        RETURNING id, username, email, full_name, avatar_url AS avatar, bio
       `;
 
       const result = await pool.query(query, values);
@@ -87,7 +97,7 @@ class UsersController {
           u.id,
           u.username,
           u.full_name,
-          u.avatar,
+          COALESCE(to_jsonb(u)->>'avatar_url', to_jsonb(u)->>'avatar') AS avatar,
           EXISTS(
             SELECT 1 FROM friends 
             WHERE user_id = $1 AND friend_id = u.id
@@ -124,7 +134,7 @@ class UsersController {
           u.id,
           u.username,
           u.full_name,
-          u.avatar,
+          COALESCE(to_jsonb(u)->>'avatar_url', to_jsonb(u)->>'avatar') AS avatar,
           u.bio,
           u.created_at,
           EXISTS(
@@ -133,7 +143,7 @@ class UsersController {
           ) as is_friend,
           EXISTS(
             SELECT 1 FROM ws_connections 
-            WHERE user_id = u.id AND is_online = TRUE
+            WHERE user_id = u.id AND socket_id IS NOT NULL
           ) as is_online
          FROM users u
          WHERE u.id = $1`,

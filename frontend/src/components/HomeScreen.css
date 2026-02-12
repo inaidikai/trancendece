@@ -1,0 +1,179 @@
+.home-screen {
+  width: 100vw;
+  height: 100vh;
+  background-color: #402f2d;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: visible;
+}
+
+.home-logo-link {
+  position: absolute;
+  top: 24px;
+  left: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+  z-index: 5;
+}
+
+.home-logo {
+  height: 36px;
+  width: auto;
+  object-fit: contain;
+}
+
+.home-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0.9rem;
+  width: 100%;
+  max-width: 1200px;
+  padding: 1.25rem 2rem 2rem;
+  padding-top: 16px;
+}
+
+.title-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 58px;
+}
+
+.main-title {
+  font-family: "Fredoka One", cursive;
+  font-size: 38px;
+  color: #f8f8f8;
+  text-transform: none;
+  margin: 0;
+  text-align: center;
+  text-shadow:
+    /* -3px -3px 0 #230401,
+    3px -3px 0 #230401, */
+    -3px 3px 0 #230401,
+    3px 3px 0 #230401,
+    0 5px 14px rgba(0, 0, 0, 0.35);
+}
+
+.page-count {
+  font-family: "Baloo Thambi 2", sans-serif;
+  font-size: 18px;
+  color: #f8f8f8;
+  margin: 0;
+  text-shadow:
+    /* -2px -2px 0 #230401,
+    2px -2px 0 #230401, */
+    -2px 2px 0 #230401,
+    2px 2px 0 #230401;
+}
+
+.book-frame {
+  width: 100%;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  overflow: visible;
+  margin-top: 32px;
+  margin-bottom: 28px;
+}
+
+.book-slot {
+  width: 100%;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  overflow: visible;
+}
+
+.action-buttons {
+  display: flex;
+  gap: 20px;
+  align-items: center;
+  justify-content: center;
+  margin-top: 0;
+  padding-bottom: 0;
+}
+
+.confirm-anchor {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.confirm-anchor .fixed {
+  position: absolute !important;
+  bottom: calc(100% + 12px) !important;
+  left: 50% !important;
+  transform: translateX(-50%) !important;
+}
+
+.button-icon {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  transition: transform 0.2s ease;
+  filter: drop-shadow(2px 4px 4px rgba(0, 0, 0, 0.3));
+  width: 80px;
+  height: 80px;
+}
+
+.button-icon.disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  filter: grayscale(0.6);
+  transform: none;
+}
+
+.button-icon.disabled:hover,
+.button-icon.disabled:active {
+  transform: none;
+}
+
+.button-icon:hover {
+  transform: scale(1.08);
+}
+
+.button-icon:active {
+  transform: scale(0.96);
+}
+
+.icon-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
+@media (max-width: 768px) {
+  .main-title {
+    font-size: 24px;
+  }
+  .page-count {
+    font-size: 18px;
+  }
+  .button-icon {
+    width: 62px;
+    height: 65px;
+  }
+}
+
+@media (max-width: 480px) {
+  .main-title {
+    font-size: 36px;
+  }
+  .page-count {
+    font-size: 16px;
+  }
+  .button-icon {
+    width: 52px;
+    height: 53px;
+  }
+}

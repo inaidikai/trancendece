@@ -5,10 +5,17 @@ const DIARY_SOCIAL_WS_EVENTS = require("./realtime/constants/diarySocialWsEvent"
 const DIARY_COLLAB_WS_EVENTS = require("./realtime/constants/diaryCollabWsEvents");
 
 // handlers (these are modules, not “registerX” functions)
+<<<<<<<< HEAD:backend/realtime-service/websocket/registerLola.js
 const presence = require("./realtime/handlers/presence");
 const friends = require("./realtime/handlers/friends");
 const collab = require("./realtime/handlers/collaboration");
 const registerNotifications = require("./realtime/handlers/notification");
+========
+const presence = require("./realtime/handlers/presence");
+const friends = require("./realtime/handlers/friends");
+const collab = require("./realtime/handlers/collaboration");
+const { registerNotificationHandlers } = require("./realtime/handlers/notification");
+>>>>>>>> 040a8b1928d6342a2e5e500fe673f664630194de:backend/realtime-service/websocket/registerlala.js
 
 // --------------------
 // Socket-friendly rate limit
@@ -43,9 +50,15 @@ const cursorStore = new Map(); // entryId -> Map(userId -> cursorData)
 // --------------------
 // Main register
 // --------------------
+<<<<<<<< HEAD:backend/realtime-service/websocket/registerLola.js
 module.exports = async function registerLola(io, socket) {
   const userId = socket.data.userId;
   socket.join(`user_${socket.data.userId}`);
+========
+module.exports = async function registerLola(io, socket) {
+  const userId = socket.data.userId;
+  socket.join(`user_${socket.data.userId}`);
+>>>>>>>> 040a8b1928d6342a2e5e500fe673f664630194de:backend/realtime-service/websocket/registerlala.js
 
   // minimal baseline
   socket.emit("ready", { userId });
@@ -80,6 +93,7 @@ module.exports = async function registerLola(io, socket) {
     await collab.leaveEntryRoom(io, socket, userId, entryId, cursorStore);
   });
 
+<<<<<<<< HEAD:backend/realtime-service/websocket/registerLola.js
   socket.on(DIARY_COLLAB_WS_EVENTS.STATE_REQUEST, async ({ entryId }) => {
     if (!entryId) return;
     await collab.handleStateRequest(io, socket, userId, entryId);
@@ -89,6 +103,17 @@ module.exports = async function registerLola(io, socket) {
 
   // Disconnect cleanup
   socket.on("disconnect", async () => {
+========
+  socket.on(DIARY_COLLAB_WS_EVENTS.STATE_REQUEST, async ({ entryId }) => {
+    if (!entryId) return;
+    await collab.handleStateRequest(io, socket, userId, entryId);
+  });
+
+  registerNotificationHandlers(io, socket);
+
+  // Disconnect cleanup
+  socket.on("disconnect", async () => {
+>>>>>>>> 040a8b1928d6342a2e5e500fe673f664630194de:backend/realtime-service/websocket/registerlala.js
     try {
       if (presence?.setUserOffline) await presence.setUserOffline(userId, io);
     } catch (e) {

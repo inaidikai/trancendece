@@ -3,7 +3,8 @@
  * Core business logic for notification system
  */
 
-const pool = require('../db/connection');
+const { pool } = require('../config/database');
+const crypto = require('crypto');
 const { 
   NOTIFICATION_TYPES, 
   NOTIFICATION_PRIORITIES,
@@ -12,6 +13,91 @@ const {
 } = require('../constants/notificationWsEvents');
 
 class NotificationService {
+  static schemaReady = null;
+
+  static async ensureSchema() {
+    if (this.schemaReady) {
+      return this.schemaReady;
+    }
+
+    this.schemaReady = (async () => {
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS notifications (
+          id TEXT PRIMARY KEY,
+          recipient_id TEXT NOT NULL,
+          sender_id TEXT,
+          type TEXT NOT NULL,
+          entity_type TEXT NOT NULL,
+          entity_id TEXT,
+          title TEXT NOT NULL,
+          message TEXT NOT NULL,
+          metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+          is_read BOOLEAN NOT NULL DEFAULT FALSE,
+          read_at TIMESTAMP,
+          is_archived BOOLEAN NOT NULL DEFAULT FALSE,
+          archived_at TIMESTAMP,
+          created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+        )
+      `);
+
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS notification_preferences (
+          user_id TEXT PRIMARY KEY,
+          email_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+          push_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+          in_app_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+          digest_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+          quiet_hours_start TIME,
+          quiet_hours_end TIME,
+          created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+        )
+      `);
+
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS notification_delivery_status (
+          id BIGSERIAL PRIMARY KEY,
+          notification_id TEXT NOT NULL,
+          channel TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'pending',
+          error_message TEXT,
+          delivered_at TIMESTAMP,
+          created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
+          UNIQUE(notification_id, channel)
+        )
+      `);
+
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS notification_batches (
+          id BIGSERIAL PRIMARY KEY,
+          recipient_id TEXT NOT NULL,
+          batch_key TEXT,
+          last_notification_id TEXT,
+          count INTEGER NOT NULL DEFAULT 0,
+          created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+        )
+      `);
+
+      await pool.query(`
+        CREATE INDEX IF NOT EXISTS idx_notifications_recipient_created
+        ON notifications (recipient_id, created_at DESC)
+      `);
+
+      await pool.query(`
+        CREATE INDEX IF NOT EXISTS idx_notifications_unread
+        ON notifications (recipient_id, is_read, is_archived)
+      `);
+    })().catch((error) => {
+      this.schemaReady = null;
+      throw error;
+    });
+
+    return this.schemaReady;
+  }
+
   /**
    * Create a new notification
    */
@@ -27,12 +113,24 @@ class NotificationService {
     priority = NOTIFICATION_PRIORITIES.NORMAL,
   }) {
     try {
+      await this.ensureSchema();
+      const notificationId = crypto.randomUUID();
       const result = await pool.query(
         `INSERT INTO notifications 
-        (recipient_id, sender_id, type, entity_type, entity_id, title, message, metadata)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        (id, recipient_id, sender_id, type, entity_type, entity_id, title, message, metadata)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
         RETURNING *`,
-        [recipientId, senderId, type, entityType, entityId, title, message, JSON.stringify(metadata)]
+        [
+          notificationId,
+          recipientId,
+          senderId,
+          type,
+          entityType,
+          entityId,
+          title,
+          message,
+          JSON.stringify(metadata),
+        ]
       );
 
       const notification = result.rows[0];
@@ -51,18 +149,21 @@ class NotificationService {
    * Create multiple notifications (batch)
    */
   static async createBulkNotifications(notifications) {
+    await this.ensureSchema();
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
 
       const createdNotifications = [];
       for (const notif of notifications) {
+        const notificationId = crypto.randomUUID();
         const result = await client.query(
           `INSERT INTO notifications 
-          (recipient_id, sender_id, type, entity_type, entity_id, title, message, metadata)
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+          (id, recipient_id, sender_id, type, entity_type, entity_id, title, message, metadata)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
           RETURNING *`,
           [
+            notificationId,
             notif.recipientId,
             notif.senderId || null,
             notif.type,
@@ -102,12 +203,17 @@ class NotificationService {
     } = options;
 
     try {
+      await this.ensureSchema();
+      const allowedSortBy = new Set(['created_at', 'updated_at', 'read_at', 'archived_at']);
+      const safeSortBy = allowedSortBy.has(sortBy) ? sortBy : 'created_at';
+      const safeSortOrder = String(sortOrder).toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
+
       let query = `
         SELECT n.*, 
           json_build_object(
             'id', u.id,
-            'name', u.name,
-            'avatar', u.avatar
+            'name', COALESCE(u.full_name, u.username),
+            'avatar', u.avatar_url
           ) as sender
         FROM notifications n
         LEFT JOIN users u ON n.sender_id = u.id
@@ -130,7 +236,7 @@ class NotificationService {
         paramIndex++;
       }
 
-      query += ` ORDER BY ${sortBy} ${sortOrder} LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
+      query += ` ORDER BY n.${safeSortBy} ${safeSortOrder} LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
       params.push(limit, offset);
 
       const result = await pool.query(query, params);
@@ -146,8 +252,13 @@ class NotificationService {
    */
   static async getUnreadCount(userId) {
     try {
+      await this.ensureSchema();
       const result = await pool.query(
-        `SELECT get_unread_count($1) as count`,
+        `SELECT COUNT(*)::int as count
+         FROM notifications
+         WHERE recipient_id = $1
+           AND is_read = FALSE
+           AND is_archived = FALSE`,
         [userId]
       );
       return result.rows[0].count;
@@ -162,19 +273,27 @@ class NotificationService {
    */
   static async markAsRead(userId, notificationIds = null) {
     try {
-      let result;
+      await this.ensureSchema();
       if (notificationIds && notificationIds.length > 0) {
-        result = await pool.query(
-          `SELECT mark_notifications_read($1, $2) as updated_count`,
+        const result = await pool.query(
+          `UPDATE notifications
+           SET is_read = TRUE, read_at = NOW(), updated_at = NOW()
+           WHERE recipient_id = $1
+             AND id = ANY($2)
+             AND is_read = FALSE`,
           [userId, notificationIds]
         );
+        return result.rowCount;
       } else {
-        result = await pool.query(
-          `SELECT mark_notifications_read($1) as updated_count`,
+        const result = await pool.query(
+          `UPDATE notifications
+           SET is_read = TRUE, read_at = NOW(), updated_at = NOW()
+           WHERE recipient_id = $1
+             AND is_read = FALSE`,
           [userId]
         );
+        return result.rowCount;
       }
-      return result.rows[0].updated_count;
     } catch (error) {
       console.error('[NotificationService] Mark as read error:', error);
       throw error;
@@ -186,9 +305,10 @@ class NotificationService {
    */
   static async markAsUnread(userId, notificationId) {
     try {
+      await this.ensureSchema();
       const result = await pool.query(
         `UPDATE notifications 
-        SET is_read = FALSE, read_at = NULL
+        SET is_read = FALSE, read_at = NULL, updated_at = NOW()
         WHERE id = $1 AND recipient_id = $2
         RETURNING *`,
         [notificationId, userId]
@@ -205,9 +325,10 @@ class NotificationService {
    */
   static async archiveNotifications(userId, notificationIds) {
     try {
+      await this.ensureSchema();
       const result = await pool.query(
         `UPDATE notifications 
-        SET is_archived = TRUE, archived_at = NOW()
+        SET is_archived = TRUE, archived_at = NOW(), updated_at = NOW()
         WHERE recipient_id = $1 AND id = ANY($2)
         RETURNING *`,
         [userId, notificationIds]
@@ -224,9 +345,10 @@ class NotificationService {
    */
   static async unarchiveNotifications(userId, notificationIds) {
     try {
+      await this.ensureSchema();
       const result = await pool.query(
         `UPDATE notifications 
-        SET is_archived = FALSE, archived_at = NULL
+        SET is_archived = FALSE, archived_at = NULL, updated_at = NOW()
         WHERE recipient_id = $1 AND id = ANY($2)
         RETURNING *`,
         [userId, notificationIds]
@@ -243,6 +365,7 @@ class NotificationService {
    */
   static async deleteNotification(userId, notificationId) {
     try {
+      await this.ensureSchema();
       const result = await pool.query(
         `DELETE FROM notifications 
         WHERE id = $1 AND recipient_id = $2
@@ -261,6 +384,7 @@ class NotificationService {
    */
   static async getPreferences(userId) {
     try {
+      await this.ensureSchema();
       const result = await pool.query(
         `SELECT * FROM notification_preferences WHERE user_id = $1`,
         [userId]
@@ -283,6 +407,7 @@ class NotificationService {
    */
   static async updatePreferences(userId, preferences) {
     try {
+      await this.ensureSchema();
       const fields = [];
       const values = [];
       let paramIndex = 1;
@@ -316,6 +441,7 @@ class NotificationService {
    */
   static async createDefaultPreferences(userId) {
     try {
+      await this.ensureSchema();
       const result = await pool.query(
         `INSERT INTO notification_preferences (user_id)
         VALUES ($1)
@@ -335,9 +461,12 @@ class NotificationService {
    */
   static async createDeliveryStatus(notificationId, channel, status = NOTIFICATION_STATUS.PENDING) {
     try {
+      await this.ensureSchema();
       await pool.query(
         `INSERT INTO notification_delivery_status (notification_id, channel, status)
-        VALUES ($1, $2, $3)`,
+        VALUES ($1, $2, $3)
+        ON CONFLICT (notification_id, channel)
+        DO UPDATE SET status = EXCLUDED.status, updated_at = NOW()`,
         [notificationId, channel, status]
       );
     } catch (error) {
@@ -350,10 +479,13 @@ class NotificationService {
    */
   static async updateDeliveryStatus(notificationId, channel, status, errorMessage = null) {
     try {
-      const deliveredAt = status === NOTIFICATION_STATUS.DELIVERED ? 'NOW()' : 'NULL';
+      await this.ensureSchema();
       await pool.query(
         `UPDATE notification_delivery_status 
-        SET status = $1, error_message = $2, delivered_at = ${deliveredAt}
+        SET status = $1,
+            error_message = $2,
+            delivered_at = CASE WHEN $1 = '${NOTIFICATION_STATUS.DELIVERED}' THEN NOW() ELSE delivered_at END,
+            updated_at = NOW()
         WHERE notification_id = $3 AND channel = $4`,
         [status, errorMessage, notificationId, channel]
       );
@@ -367,6 +499,7 @@ class NotificationService {
    */
   static async getBatches(userId, limit = 10) {
     try {
+      await this.ensureSchema();
       const result = await pool.query(
         `SELECT nb.*, n.title, n.message, n.created_at as last_notification_time
         FROM notification_batches nb
@@ -388,6 +521,7 @@ class NotificationService {
    */
   static async cleanupOldNotifications(daysOld = 90) {
     try {
+      await this.ensureSchema();
       const result = await pool.query(
         `DELETE FROM notifications 
         WHERE is_archived = TRUE 

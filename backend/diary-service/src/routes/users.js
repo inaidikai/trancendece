@@ -7,6 +7,7 @@ router.use(authenticateToken);
 
 router.get('/me', UsersController.getMyProfile);
 router.put('/me', UsersController.updateProfile);
+router.post('/me/update', UsersController.updateProfile);
 router.get('/search', UsersController.searchUsers);
 router.get('/:userId', UsersController.getUserProfile);
 
