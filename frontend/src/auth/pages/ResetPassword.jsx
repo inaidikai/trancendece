@@ -32,12 +32,8 @@ export default function ResetPassword({ navigate, token }) {
 
     if (!confirm) {
       next.confirm = "Please confirm your password";
-    } else {
-      if (!isPasswordPolicySatisfied(confirm)) {
-        next.confirm = PASSWORD_POLICY_ERROR_MESSAGE;
-      } else if (confirm !== password) {
-        next.confirm = "Passwords do not match";
-      }
+    } else if (confirm !== password) {
+      next.confirm = "Passwords do not match";
     }
     setErrors(next);
     return Object.keys(next).length === 0;

@@ -61,12 +61,8 @@ export default function Signup({ navigate }) {
     }
     if (!confirmPassword) {
       next.confirmPassword = "Please confirm your password";
-    } else {
-      if (!isPasswordPolicySatisfied(confirmPassword)) {
-        next.confirmPassword = PASSWORD_POLICY_ERROR_MESSAGE;
-      } else if (confirmPassword !== password) {
-        next.confirmPassword = "Passwords do not match";
-      }
+    } else if (confirmPassword !== password) {
+      next.confirmPassword = "Passwords do not match";
     }
     if (!terms) next.terms = "You must agree to Privacy Policy and Terms";
     setErrors(next);
