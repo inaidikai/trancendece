@@ -2,7 +2,12 @@ import React, { useEffect, useState } from "react";
 import AuthCard from "../components/AuthCard";
 import AuthInput from "../components/AuthInput";
 import AuthButton from "../components/AuthButton";
+import PasswordStrength from "../components/PasswordStrength";
 import { resetPassword } from "../authApi";
+import {
+  PASSWORD_POLICY_ERROR_MESSAGE,
+  isPasswordPolicySatisfied,
+} from "../passwordPolicy";
 
 export default function ResetPassword({ navigate, token }) {
   const [password, setPassword] = useState("");
@@ -19,10 +24,21 @@ export default function ResetPassword({ navigate, token }) {
 
   const validate = () => {
     const next = {};
-    if (!password) next.password = "Password is required";
-    else if (password.length < 6) next.password = "Password must be at least 6 characters";
-    if (!confirm) next.confirm = "Please confirm your password";
-    else if (confirm !== password) next.confirm = "Passwords do not match";
+    if (!password) {
+      next.password = "Password is required";
+    } else if (!isPasswordPolicySatisfied(password)) {
+      next.password = PASSWORD_POLICY_ERROR_MESSAGE;
+    }
+
+    if (!confirm) {
+      next.confirm = "Please confirm your password";
+    } else {
+      if (!isPasswordPolicySatisfied(confirm)) {
+        next.confirm = PASSWORD_POLICY_ERROR_MESSAGE;
+      } else if (confirm !== password) {
+        next.confirm = "Passwords do not match";
+      }
+    }
     setErrors(next);
     return Object.keys(next).length === 0;
   };
@@ -98,6 +114,7 @@ export default function ResetPassword({ navigate, token }) {
           error={errors.confirm}
           disabled={loading}
         />
+        <PasswordStrength password={password} />
         <AuthButton type="submit" disabled={loading || !token} block>
           {loading ? "Resetting..." : "Reset password"}
         </AuthButton>

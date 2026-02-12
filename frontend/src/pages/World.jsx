@@ -1009,7 +1009,7 @@ export default function World() {
         hit = {
           text: isMobile
             ? `Tap Interact or use Open Diary for Book ${b.id}`
-            : `Press E or use Open Diary for Book ${b.id}`,
+            : "Hi, want to make your space? Press E or use Open Diary",
           actionLabel: "Open Diary",
           go: () => nav("/home"),
         };
@@ -1027,8 +1027,8 @@ export default function World() {
         }
         hit = {
           text: isMobile
-            ? "Hi, want to make your space with your friends? Use Open Diary."
-            : "Hi, want to make your space with your friends? Press E or use Open Diary.",
+            ? "Use Open Diary."
+            : "Hi, want to make your space with your friends? Press E or Open Diary",
           actionLabel: "Open Diary",
           go: () => nav("/home?mode=collab"),
         };

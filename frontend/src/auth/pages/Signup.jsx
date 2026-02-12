@@ -4,6 +4,10 @@ import AuthInput from "../components/AuthInput";
 import AuthButton from "../components/AuthButton";
 import PasswordStrength from "../components/PasswordStrength";
 import { register, setToken } from "../authApi";
+import {
+  PASSWORD_POLICY_ERROR_MESSAGE,
+  isPasswordPolicySatisfied,
+} from "../passwordPolicy";
 
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const usernameRegex = /^[a-zA-Z0-9_]{3,30}$/;
@@ -50,13 +54,19 @@ export default function Signup({ navigate }) {
     } else if (!emailRegex.test(trimmedEmail)) {
       next.email = "Invalid email address";
     }
-    if (!password || password.length < 6) {
-      next.password = "Password must be at least 6 characters";
+    if (!password) {
+      next.password = "Password is required";
+    } else if (!isPasswordPolicySatisfied(password)) {
+      next.password = PASSWORD_POLICY_ERROR_MESSAGE;
     }
     if (!confirmPassword) {
       next.confirmPassword = "Please confirm your password";
-    } else if (confirmPassword !== password) {
-      next.confirmPassword = "Passwords do not match";
+    } else {
+      if (!isPasswordPolicySatisfied(confirmPassword)) {
+        next.confirmPassword = PASSWORD_POLICY_ERROR_MESSAGE;
+      } else if (confirmPassword !== password) {
+        next.confirmPassword = "Passwords do not match";
+      }
     }
     if (!terms) next.terms = "You must agree to Privacy Policy and Terms";
     setErrors(next);
