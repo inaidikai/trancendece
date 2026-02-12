@@ -254,7 +254,7 @@
   bottom: 18px;
   transform: translateX(-50%);
   z-index: 10095;
-  width: min(560px, calc(100vw - 24px));
+  width: min(820px, calc(100vw - 24px));
   background: #fffaf0;
   border: 2px solid #d5cbb8;
   border-radius: 14px;
@@ -271,6 +271,7 @@
   font-size: 14px;
   color: #230401;
   line-height: 1.25;
+  white-space: nowrap;
 }
 
 .world-context-action .auth-button {
@@ -468,6 +469,7 @@
 
   .world-context-text {
     font-size: 13px;
+    white-space: normal;
   }
 
   .world-context-action .auth-button {

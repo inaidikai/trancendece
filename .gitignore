@@ -8,3 +8,5 @@ pnpm-debug.log*
 infrastructure/certs/*.key
 infrastructure/certs/*.crt
 infrastructure/certs/*.srl
+.env
+.env.*

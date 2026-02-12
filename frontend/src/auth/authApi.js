@@ -71,9 +71,16 @@ async function apiRequest(path, { method = "POST", body, headers, auth } = {}) {
   }
 
   if (!res.ok) {
+    const serverMessage = data?.message || data?.error || "Request failed";
+    const safeMessage =
+      res.status >= 500
+        ? "Service temporarily unavailable. Please try again."
+        : serverMessage;
+
     throw {
       status: res.status,
-      message: data?.message || data?.error || "Request failed",
+      message: safeMessage,
+      serverMessage,
     };
   }
 

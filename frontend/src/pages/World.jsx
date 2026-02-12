@@ -18,6 +18,14 @@ import AuthButton from "../auth/components/AuthButton";
 import "../auth/auth.css";
 import "../auth/components/authComponents.css";
 
+const SOFTWARE_RENDERER_PATTERN = /(llvmpipe|swiftshader|software)/i;
+const WEBGL_CONTEXT_PROFILES = [
+  { antialias: true, powerPreference: "high-performance" },
+  { antialias: true, powerPreference: "default" },
+  { antialias: false, powerPreference: "default" },
+  {},
+];
+
 function lerpAngle(a, b, t) {
   // shortest signed angular difference, in [-PI, PI]
   const diff =
@@ -115,6 +123,141 @@ function useUnifiedInput(isMobile) {
   };
 
   return { input, consumeLook };
+}
+
+function detectWebGLStatus() {
+  if (typeof window === "undefined") {
+    return { available: true, rendererName: "", softwareRenderer: false, reason: "" };
+  }
+
+  try {
+    if (!window.WebGLRenderingContext && !window.WebGL2RenderingContext) {
+      return {
+        available: false,
+        rendererName: "",
+        softwareRenderer: false,
+        reason: "WebGL API is disabled in this browser.",
+      };
+    }
+
+    const canvas = document.createElement("canvas");
+    let gl = null;
+    let lastProfile = null;
+
+    for (const profile of WEBGL_CONTEXT_PROFILES) {
+      lastProfile = profile;
+      gl =
+        canvas.getContext("webgl2", profile) ||
+        canvas.getContext("webgl", profile) ||
+        canvas.getContext("experimental-webgl", profile);
+      if (gl) break;
+    }
+
+    if (!gl) {
+      return {
+        available: false,
+        rendererName: "",
+        softwareRenderer: false,
+        reason: `Context creation failed${lastProfile ? " for all fallback profiles" : ""}.`,
+      };
+    }
+
+    let rendererName = "";
+    try {
+      const debugInfo = gl.getExtension("WEBGL_debug_renderer_info");
+      rendererName = debugInfo
+        ? String(gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL) || "")
+        : String(gl.getParameter(gl.RENDERER) || "");
+    } catch {
+      rendererName = "";
+    }
+
+    return {
+      available: true,
+      rendererName,
+      softwareRenderer: SOFTWARE_RENDERER_PATTERN.test(rendererName),
+      reason: "",
+    };
+  } catch {
+    return {
+      available: false,
+      rendererName: "",
+      softwareRenderer: false,
+      reason: "Context creation threw a runtime exception.",
+    };
+  }
+}
+
+function WebGLFallback({ onOpenDiary, onTryAnyway, reason }) {
+  return (
+    <div
+      style={{
+        position: "absolute",
+        inset: 0,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        background:
+          "linear-gradient(180deg, rgba(6,23,39,0.98) 0%, rgba(10,10,12,0.98) 100%)",
+        padding: 24,
+      }}
+    >
+      <div
+        style={{
+          width: "min(560px, 100%)",
+          borderRadius: 14,
+          border: "1px solid rgba(255,255,255,0.18)",
+          background: "rgba(0,0,0,0.45)",
+          color: "white",
+          padding: 20,
+        }}
+      >
+        <h3 style={{ margin: 0, marginBottom: 10 }}>WebGL is unavailable in this browser</h3>
+        <p style={{ margin: 0, opacity: 0.9, lineHeight: 1.45 }}>
+          Chrome could not initialize GPU rendering, so the 3D world is disabled for now.
+          Enable hardware acceleration, restart Chrome, then reload this page.
+        </p>
+        {reason ? (
+          <p style={{ marginTop: 10, marginBottom: 0, opacity: 0.75, fontSize: 12 }}>
+            Detected reason: {reason}
+          </p>
+        ) : null}
+        <div style={{ marginTop: 16, display: "flex", gap: 10, flexWrap: "wrap" }}>
+          <AuthButton onClick={onOpenDiary}>Open Diary</AuthButton>
+          <AuthButton onClick={onTryAnyway}>Try anyway</AuthButton>
+          <AuthButton onClick={() => window.location.reload()}>Retry WebGL</AuthButton>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+class WorldCanvasErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error) {
+    this.props.onError?.(error);
+  }
+
+  componentDidUpdate(prevProps) {
+    if (prevProps.resetKey !== this.props.resetKey && this.state.hasError) {
+      this.setState({ hasError: false });
+    }
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return this.props.fallback;
+    }
+    return this.props.children;
+  }
 }
 
 const AnimalModel = React.forwardRef(function AnimalModel({ state }, ref) {
@@ -679,6 +822,10 @@ export default function World() {
   const nav = useNavigate();
   const isMobile = useIsMobile();
   const { input, consumeLook } = useUnifiedInput(isMobile);
+  const [webglStatus, setWebglStatus] = useState(() => detectWebGLStatus());
+  const [forceWebGLAttempt, setForceWebGLAttempt] = useState(false);
+  const [canvasError, setCanvasError] = useState(null);
+  const [canvasResetKey, setCanvasResetKey] = useState(0);
   const dashboardNavigate = useCallback(
     (target) => {
       if (target === "login") {
@@ -709,6 +856,20 @@ export default function World() {
   const pendingChickSoundRef = useRef(false);
   const lastMoveSoundAtRef = useRef(0);
   const lastPosRef = useRef(null);
+
+  useEffect(() => {
+    const status = detectWebGLStatus();
+    setWebglStatus(status);
+  }, []);
+
+  const shouldRenderWebGL = (webglStatus.available || forceWebGLAttempt) && !canvasError;
+  const fallbackReason = canvasError?.message || webglStatus.reason;
+
+  const retryWebGLAttempt = useCallback(() => {
+    setCanvasError(null);
+    setForceWebGLAttempt(true);
+    setCanvasResetKey((value) => value + 1);
+  }, []);
   
   useEffect(() => {
     const minion = new Audio("/sfx/minion-speaking-made-with-Voicemod.mp3");
@@ -848,7 +1009,7 @@ export default function World() {
         hit = {
           text: isMobile
             ? `Tap Interact or use Open Diary for Book ${b.id}`
-            : `Press E or use Open Diary for Book ${b.id}`,
+            : "Hi, want to make your space? Press E or use Open Diary",
           actionLabel: "Open Diary",
           go: () => nav("/home"),
         };
@@ -866,8 +1027,8 @@ export default function World() {
         }
         hit = {
           text: isMobile
-            ? "Hi, want to make your space with your friends? Use Open Diary."
-            : "Hi, want to make your space with your friends? Press E or use Open Diary.",
+            ? "Use Open Diary."
+            : "Hi, want to make your space with your friends? Press E or Open Diary",
           actionLabel: "Open Diary",
           go: () => nav("/home?mode=collab"),
         };
@@ -895,50 +1056,85 @@ export default function World() {
       <div
         id="world-scene-lock-target"
         ref={sceneLockRef}
-        style={{ height: "100%", width: "100%" }}
+        style={{ position: "relative", height: "100%", width: "100%" }}
         onPointerDown={() => {
           unlockAudio();
-          requestScenePointerLock();
+          if (shouldRenderWebGL) {
+            requestScenePointerLock();
+          }
         }}
       >
-        <Canvas camera={{ fov: 50 }} style={{ height: "100%", width: "100%", display: "block" }}>
-          <Environment
-    files="/hdri/coffee_sky.hdr"
-    background
-    intensity={0.5}
-  />
+        {shouldRenderWebGL ? (
+          <WorldCanvasErrorBoundary
+            resetKey={canvasResetKey}
+            onError={(error) => {
+              setCanvasError(error || new Error("Renderer initialization failed."));
+              setForceWebGLAttempt(false);
+            }}
+            fallback={
+              <WebGLFallback
+                onOpenDiary={() => nav("/home")}
+                onTryAnyway={retryWebGLAttempt}
+                reason={fallbackReason}
+              />
+            }
+          >
+            <Canvas
+              camera={{ fov: 50 }}
+              gl={{ antialias: false, powerPreference: "default" }}
+              fallback={
+                <WebGLFallback
+                  onOpenDiary={() => nav("/home")}
+                  onTryAnyway={retryWebGLAttempt}
+                  reason={fallbackReason}
+                />
+              }
+              style={{ height: "100%", width: "100%", display: "block" }}
+            >
+              <Environment
+                files="/hdri/coffee_sky.hdr"
+                background
+                intensity={0.5}
+              />
 
-  <ambientLight intensity={0.6} />
-  <directionalLight position={[5, 10, 5]} intensity={0.1} />
+              <ambientLight intensity={0.6} />
+              <directionalLight position={[5, 10, 5]} intensity={0.1} />
 
-  {!isMobile && <PointerLockControls selector="#world-scene-lock-target" />}
+              {!isMobile && <PointerLockControls selector="#world-scene-lock-target" />}
 
-  <Physics>
+              <Physics>
+                <Ocean y={-0.5} size={600} />
+                <BoundaryWalls />
 
-      <Ocean y={-0.5} size={600}  />
-      <BoundaryWalls />
+                {/* Coffee shop collision */}
+                <CoffeeShop position={[0, -0.3, 0]} scale={1} />
 
-    {/* Coffee shop collision */}
-    <CoffeeShop position={[0, -0.3, 0]} scale={1} />
+                {/* Magic frog */}
+                <MagicFrog position={frogPos} scale={0.2} />
 
-    {/* Magic frog */}
-    <MagicFrog position={frogPos} scale={0.2} />
+                {/* Interactive objects */}
+                {books.map((b) => (
+                  <Book key={b.id} pos={b.pos} label={`Book ${b.id}`} />
+                ))}
+                <RigidBody type="fixed" colliders={false}>
+                  <CuboidCollider args={[400, 0.5, 400]} position={[0, -1, 0]} />
+                </RigidBody>
 
-    {/* Interactive objects */}
-    {books.map((b) => (
-      <Book key={b.id} pos={b.pos} label={`Book ${b.id}`} />
-    ))}
-    <RigidBody type="fixed" colliders={false}>
-  <CuboidCollider args={[400, 0.5, 400]} position={[0, -1, 0]} />
-</RigidBody>
-
-    {/* Player */}
-    <Player onTick={tick} inputRef={input} consumeLook={consumeLook} />
-  </Physics>
-        </Canvas>
+                {/* Player */}
+                <Player onTick={tick} inputRef={input} consumeLook={consumeLook} />
+              </Physics>
+            </Canvas>
+          </WorldCanvasErrorBoundary>
+        ) : (
+          <WebGLFallback
+            onOpenDiary={() => nav("/home")}
+            onTryAnyway={retryWebGLAttempt}
+            reason={fallbackReason}
+          />
+        )}
       </div>
 
-      {!isMobile && (
+      {shouldRenderWebGL && !isMobile && (
         <div className="world-controls-panel">
           <div className="world-controls-grid">
             <span className="world-controls-item">
@@ -966,7 +1162,7 @@ export default function World() {
       )}
 
       {/* Responsive prompt */}
-      {prompt && (
+      {shouldRenderWebGL && prompt && (
         <div className="world-context-prompt">
           <div className="world-context-text">{prompt.text}</div>
           {prompt.actionLabel && (
@@ -984,7 +1180,7 @@ export default function World() {
         </div>
       )}
 
-      {isMobile && (
+      {shouldRenderWebGL && isMobile && (
         <MobileControls
           inputRef={input}
           showInteract={!!prompt}

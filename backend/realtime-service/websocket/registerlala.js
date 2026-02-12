@@ -8,6 +8,7 @@ const DIARY_COLLAB_WS_EVENTS = require("./realtime/constants/diaryCollabWsEvents
 const presence = require("./realtime/handlers/presence");
 const friends = require("./realtime/handlers/friends");
 const collab = require("./realtime/handlers/collaboration");
+const { registerNotificationHandlers } = require("./realtime/handlers/notification");
 
 // --------------------
 // Socket-friendly rate limit
@@ -44,6 +45,7 @@ const cursorStore = new Map(); // entryId -> Map(userId -> cursorData)
 // --------------------
 module.exports = async function registerLola(io, socket) {
   const userId = socket.data.userId;
+  socket.join(`user_${socket.data.userId}`);
 
   // minimal baseline
   socket.emit("ready", { userId });
@@ -82,6 +84,8 @@ module.exports = async function registerLola(io, socket) {
     if (!entryId) return;
     await collab.handleStateRequest(io, socket, userId, entryId);
   });
+
+  registerNotificationHandlers(io, socket);
 
   // Disconnect cleanup
   socket.on("disconnect", async () => {

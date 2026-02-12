@@ -724,14 +724,28 @@ html, #root { height: 100%; }
   display: flex;
   gap: 8px;
   overflow-x: auto;
-  padding-bottom: 4px;
+  padding-bottom: 6px;
   margin-bottom: 12px;
-  scrollbar-width: none;
-  -ms-overflow-style: none;
+  scrollbar-width: thin;
+  scrollbar-color: #c9b675 rgba(255, 255, 255, 0.55);
 }
 
 .sticker-popover-filters::-webkit-scrollbar {
-  display: none;
+  height: 5px;
+}
+
+.sticker-popover-filters::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.55);
+  border-radius: 999px;
+}
+
+.sticker-popover-filters::-webkit-scrollbar-thumb {
+  background: #c9b675;
+  border-radius: 999px;
+}
+
+.sticker-popover-filters::-webkit-scrollbar-thumb:hover {
+  background: #b8a563;
 }
 
 .sticker-filter-chip {
