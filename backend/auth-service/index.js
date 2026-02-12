@@ -6,6 +6,8 @@ const db = require("./config/database");
 const authRoutes = require("./routes/authRoutes");
 
 const PORT = Number(process.env.PORT || 8000);
+const DB_RETRY_ATTEMPTS = Number(process.env.DB_RETRY_ATTEMPTS || 30);
+const DB_RETRY_DELAY_MS = Number(process.env.DB_RETRY_DELAY_MS || 2000);
 
 fastify.register(jwt, {
   secret: process.env.JWT_SECRET || "dev-super-secret-change-me",
@@ -34,11 +36,41 @@ const ensureAuthSchema = async () => {
   `);
 };
 
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const isRetryableDbError = (err) => {
+  const code = err && err.code;
+  return (
+    code === "57P03" || // DB is starting up
+    code === "ECONNREFUSED" ||
+    code === "ENOTFOUND" ||
+    code === "ETIMEDOUT"
+  );
+};
+
+const waitForDatabaseReady = async () => {
+  for (let attempt = 1; attempt <= DB_RETRY_ATTEMPTS; attempt += 1) {
+    try {
+      await db.query("SELECT 1");
+      return;
+    } catch (err) {
+      if (!isRetryableDbError(err) || attempt === DB_RETRY_ATTEMPTS) {
+        throw err;
+      }
+      fastify.log.warn(
+        `Database not ready (${err.code || err.message}); retry ${attempt}/${DB_RETRY_ATTEMPTS} in ${DB_RETRY_DELAY_MS}ms`
+      );
+      await sleep(DB_RETRY_DELAY_MS);
+    }
+  }
+};
+
 const start = async () => {
   try {
     await fastify.register(fastifyExpress);
     fastify.use(express.json());
     fastify.use(authRoutes);
+    await waitForDatabaseReady();
     await ensureAuthSchema();
 
     await fastify.listen({ port: PORT, host: "0.0.0.0" });
