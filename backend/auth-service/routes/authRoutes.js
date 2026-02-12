@@ -10,6 +10,10 @@ router.post('/register', registerLimiter, validate(schemas.register), authContro
 router.post('/login', authLimiter, validate(schemas.login), authController.login);
 router.post('/verify-2fa-login', authLimiter, authController.verify2FALogin);
 
+// Google OAuth routes
+router.get('/google/auth-url', authController.googleAuthInit);
+router.post('/google/callback', authController.googleAuthCallback);
+
 // Internal API routes (for other services)
 router.post('/verify', authController.verifyTokenForServices);
 router.get('/user/:id', authController.getUserById);
@@ -17,5 +21,6 @@ router.get('/user/:id', authController.getUserById);
 // Protected routes
 router.get('/me', authMiddleware, authController.getMe);
 router.post('/logout', authMiddleware, authController.logout);
+router.post('/link-google', authMiddleware, authController.linkGoogleAccount);
 
 module.exports = router;

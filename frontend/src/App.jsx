@@ -8,6 +8,7 @@ import FlipbookHome from "./pages/FlipbookHome.jsx";
 import DiaryEditor from "./pages/DiaryEditor.jsx";
 import PrivacyPolicy from "./pages/PrivacyPolicy.jsx";
 import Terms from "./pages/Terms.jsx";
+import GoogleCallback from "./pages/GoogleCallback.jsx";
 import { getToken } from "./auth/authApi";
 
 function RequireAuth({ children }) {
@@ -25,6 +26,7 @@ export default function App() {
         <Route path="/reset-password" element={<AuthRoutes initial="reset-password" />} />
         <Route path="/verify-2fa" element={<AuthRoutes initial="verify-2fa" />} />
         <Route path="/create-profile" element={<AuthRoutes initial="create-profile" />} />
+        <Route path="/auth/google/callback" element={<GoogleCallback />} />
         <Route path="/auth/*" element={<AuthRoutes initial="login" />} />
         <Route path="/privacy" element={<PrivacyPolicy />} />
         <Route path="/terms" element={<Terms />} />
