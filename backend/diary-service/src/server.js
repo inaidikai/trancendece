@@ -1,46 +1,21 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-const pool = require('./db/connection');
-
-// Routes
-const friendsRoutes = require('./routes/friends');
-const notificationsRoutes = require('./routes/notifications');
-const entriesRoutes = require('./routes/entries');
-const collaboratorsRoutes = require('./routes/collaborators');
-const usersRoutes = require('./routes/users');
-const dashboardRoutes = require('./routes/dashboard');
-
-const app = express();
-const DB_RETRY_ATTEMPTS = Number(process.env.DB_RETRY_ATTEMPTS || 30);
-const DB_RETRY_DELAY_MS = Number(process.env.DB_RETRY_DELAY_MS || 2000);
-const REQUEST_BODY_LIMIT = process.env.DIARY_REQUEST_BODY_LIMIT || '10mb';
-const DEFAULT_ALLOWED_ORIGINS = ['http://localhost:5173', 'http://127.0.0.1:5173'];
+let pool;
+const { loadVaultSecrets } = require('../../shared/vault');
 
 function normalizeOrigin(origin) {
   return (origin || '').trim().replace(/\/+$/, '');
 }
 
-function getAllowedOrigins() {
-  const rawOrigins = process.env.CORS_ORIGINS || process.env.FRONTEND_URL || '';
-  const configured = rawOrigins
+function getAllowedOrigins(rawOrigins, defaults) {
+  const configured = (rawOrigins || '')
     .split(',')
     .map(normalizeOrigin)
     .filter(Boolean);
 
-  return configured.length ? configured : DEFAULT_ALLOWED_ORIGINS;
+  return configured.length ? configured : defaults;
 }
-
-const allowedOrigins = getAllowedOrigins();
-const corsOptions = {
-  origin(origin, callback) {
-    if (!origin) return callback(null, true);
-    const normalizedOrigin = normalizeOrigin(origin);
-    if (allowedOrigins.includes(normalizedOrigin)) return callback(null, true);
-    return callback(new Error(`CORS origin denied: ${origin}`));
-  },
-  credentials: true,
-};
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -54,55 +29,22 @@ const isRetryableDbError = (err) => {
   );
 };
 
-async function waitForDatabaseReady() {
-  for (let attempt = 1; attempt <= DB_RETRY_ATTEMPTS; attempt += 1) {
+async function waitForDatabaseReady(retryAttempts, retryDelayMs) {
+  for (let attempt = 1; attempt <= retryAttempts; attempt += 1) {
     try {
       await pool.query('SELECT 1');
       return;
     } catch (error) {
-      if (!isRetryableDbError(error) || attempt === DB_RETRY_ATTEMPTS) {
+      if (!isRetryableDbError(error) || attempt === retryAttempts) {
         throw error;
       }
       console.warn(
-        `Diary DB not ready (${error.code || error.message}); retry ${attempt}/${DB_RETRY_ATTEMPTS} in ${DB_RETRY_DELAY_MS}ms`
+        `Diary DB not ready (${error.code || error.message}); retry ${attempt}/${retryAttempts} in ${retryDelayMs}ms`
       );
-      await sleep(DB_RETRY_DELAY_MS);
+      await sleep(retryDelayMs);
     }
   }
 }
-
-// Middleware
-app.use(cors(corsOptions));
-app.options('*', cors(corsOptions));
-app.use(express.json({ limit: REQUEST_BODY_LIMIT }));
-app.use(express.urlencoded({ extended: true, limit: REQUEST_BODY_LIMIT }));
-
-// Health check
-app.get('/health', (req, res) => {
-  res.json({ 
-    status: 'ok',
-    timestamp: new Date().toISOString()
-  });
-});
-
-// Routes
-app.use('/api/friends', friendsRoutes);
-app.use('/api/notifications', notificationsRoutes);
-app.use('/api/entries', entriesRoutes);
-app.use('/api/collaborators', collaboratorsRoutes);
-app.use('/api/users', usersRoutes);
-app.use('/api/dashboard', dashboardRoutes);
-
-// Error handler
-app.use((err, req, res, next) => {
-  console.error('Error:', err);
-  res.status(err.status || 500).json({
-    error: err.message || 'Internal server error'
-  });
-});
-
-// Start server
-const PORT = Number(process.env.PORT || 8002);
 
 async function ensureCoreTables() {
   await pool.query(`
@@ -212,11 +154,76 @@ async function ensureCoreTables() {
 
 async function start() {
   try {
-    await waitForDatabaseReady();
+    await loadVaultSecrets({ logger: console });
+    pool = require('./db/connection');
+
+    const DB_RETRY_ATTEMPTS = Number(process.env.DB_RETRY_ATTEMPTS || 30);
+    const DB_RETRY_DELAY_MS = Number(process.env.DB_RETRY_DELAY_MS || 2000);
+    const REQUEST_BODY_LIMIT = process.env.DIARY_REQUEST_BODY_LIMIT || '10mb';
+    const DEFAULT_ALLOWED_ORIGINS = ['https://localhost:5173', 'https://127.0.0.1:5173'];
+
+    const app = express();
+
+    // Routes (loaded after Vault so DB connections see secrets)
+    const friendsRoutes = require('./routes/friends');
+    const notificationsRoutes = require('./routes/notifications');
+    const entriesRoutes = require('./routes/entries');
+    const collaboratorsRoutes = require('./routes/collaborators');
+    const usersRoutes = require('./routes/users');
+    const dashboardRoutes = require('./routes/dashboard');
+
+    const allowedOrigins = getAllowedOrigins(
+      process.env.CORS_ORIGINS || process.env.FRONTEND_URL || '',
+      DEFAULT_ALLOWED_ORIGINS
+    );
+
+    const corsOptions = {
+      origin(origin, callback) {
+        if (!origin) return callback(null, true);
+        const normalizedOrigin = normalizeOrigin(origin);
+        if (allowedOrigins.includes(normalizedOrigin)) return callback(null, true);
+        return callback(new Error(`CORS origin denied: ${origin}`));
+      },
+      credentials: true,
+    };
+
+    // Middleware
+    app.use(cors(corsOptions));
+    app.options('*', cors(corsOptions));
+    app.use(express.json({ limit: REQUEST_BODY_LIMIT }));
+    app.use(express.urlencoded({ extended: true, limit: REQUEST_BODY_LIMIT }));
+
+    // Health check
+    app.get('/health', (req, res) => {
+      res.json({
+        status: 'ok',
+        timestamp: new Date().toISOString(),
+      });
+    });
+
+    // Routes
+    app.use('/api/friends', friendsRoutes);
+    app.use('/api/notifications', notificationsRoutes);
+    app.use('/api/entries', entriesRoutes);
+    app.use('/api/collaborators', collaboratorsRoutes);
+    app.use('/api/users', usersRoutes);
+    app.use('/api/dashboard', dashboardRoutes);
+
+    // Error handler
+    app.use((err, req, res, next) => {
+      console.error('Error:', err);
+      res.status(err.status || 500).json({
+        error: err.message || 'Internal server error',
+      });
+    });
+
+    const PORT = Number(process.env.PORT || 8002);
+
+    await waitForDatabaseReady(DB_RETRY_ATTEMPTS, DB_RETRY_DELAY_MS);
     await ensureCoreTables();
     app.listen(PORT, () => {
       console.log(`🚀 REST API server running on port ${PORT}`);
-      console.log(`📊 Health check: http://localhost:${PORT}/health`);
+      console.log(`📊 Health check: https://localhost:${PORT}/health`);
     });
   } catch (error) {
     console.error('Failed to start diary service:', error);

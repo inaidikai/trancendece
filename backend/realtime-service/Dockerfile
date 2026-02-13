@@ -1,9 +1,10 @@
 FROM node:20
 
-WORKDIR /app
-COPY package.json ./
+WORKDIR /app/backend/realtime-service
+COPY backend/realtime-service/package.json ./
 RUN npm install
-COPY . .
+COPY backend/realtime-service ./
+COPY backend/shared ../shared
 
 EXPOSE 8003
 CMD ["npm", "start"]

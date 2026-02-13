@@ -2,16 +2,9 @@ const fastify = require("fastify")({ logger: true });
 const jwt = require("@fastify/jwt");
 const fastifyExpress = require("@fastify/express");
 const express = require("express");
-const db = require("./config/database");
-const authRoutes = require("./routes/authRoutes");
-
-const PORT = Number(process.env.PORT || 8000);
-const DB_RETRY_ATTEMPTS = Number(process.env.DB_RETRY_ATTEMPTS || 30);
-const DB_RETRY_DELAY_MS = Number(process.env.DB_RETRY_DELAY_MS || 2000);
-
-fastify.register(jwt, {
-  secret: process.env.JWT_SECRET || "dev-super-secret-change-me",
-});
+let db;
+let authRoutes;
+const { loadVaultSecrets } = require("../shared/vault");
 
 fastify.get("/health", async () => ({ status: "Auth OK" }));
 
@@ -48,29 +41,41 @@ const isRetryableDbError = (err) => {
   );
 };
 
-const waitForDatabaseReady = async () => {
-  for (let attempt = 1; attempt <= DB_RETRY_ATTEMPTS; attempt += 1) {
+const waitForDatabaseReady = async (retryAttempts, retryDelayMs) => {
+  for (let attempt = 1; attempt <= retryAttempts; attempt += 1) {
     try {
       await db.query("SELECT 1");
       return;
     } catch (err) {
-      if (!isRetryableDbError(err) || attempt === DB_RETRY_ATTEMPTS) {
+      if (!isRetryableDbError(err) || attempt === retryAttempts) {
         throw err;
       }
       fastify.log.warn(
-        `Database not ready (${err.code || err.message}); retry ${attempt}/${DB_RETRY_ATTEMPTS} in ${DB_RETRY_DELAY_MS}ms`
+        `Database not ready (${err.code || err.message}); retry ${attempt}/${retryAttempts} in ${retryDelayMs}ms`
       );
-      await sleep(DB_RETRY_DELAY_MS);
+      await sleep(retryDelayMs);
     }
   }
 };
 
 const start = async () => {
   try {
+    await loadVaultSecrets({ logger: fastify.log });
+    db = require("./config/database");
+    authRoutes = require("./routes/authRoutes");
+
+    const PORT = Number(process.env.PORT || 8000);
+    const DB_RETRY_ATTEMPTS = Number(process.env.DB_RETRY_ATTEMPTS || 30);
+    const DB_RETRY_DELAY_MS = Number(process.env.DB_RETRY_DELAY_MS || 2000);
+
+    fastify.register(jwt, {
+      secret: process.env.JWT_SECRET || "dev-super-secret-change-me",
+    });
+
     await fastify.register(fastifyExpress);
     fastify.use(express.json());
     fastify.use(authRoutes);
-    await waitForDatabaseReady();
+    await waitForDatabaseReady(DB_RETRY_ATTEMPTS, DB_RETRY_DELAY_MS);
     await ensureAuthSchema();
 
     await fastify.listen({ port: PORT, host: "0.0.0.0" });

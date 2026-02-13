@@ -12,6 +12,8 @@ const keyFile = path.join(certDir, 'quillow.local.key');
 const hasLocalCert = fs.existsSync(certFile) && fs.existsSync(keyFile);
 const devHost = process.env.VITE_DEV_HOST || 'localhost';
 const wafHost = process.env.VITE_WAF_HOST || devHost;
+const wafPort = process.env.VITE_WAF_PORT || '8081';
+const wafProtocol = process.env.VITE_WAF_PROTOCOL || 'https';
 
 export default defineConfig({
   plugins: [react()],
@@ -26,9 +28,9 @@ export default defineConfig({
       : undefined,
     proxy: {
       '/api': {
-        target: `https://${wafHost}:8081`,
+        target: `${wafProtocol}://${wafHost}:${wafPort}`,
         changeOrigin: true,
-        secure: false,
+        secure: wafProtocol === 'https' ? false : undefined,
         rewrite: (path) => path.replace(/^\/api/, ''),
       },
     },

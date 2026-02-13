@@ -1,5 +1,6 @@
 const fastify = require("fastify")({ logger: true });
 const createWebSocketServer = require("./websocket/websocketServer");
+const { loadVaultSecrets } = require("../shared/vault");
 
 fastify.get("/health", async () => ({ status: "Realtime OK" }));
 
@@ -21,7 +22,18 @@ fastify.post("/trigger/notification", async (request, reply) => {
   return { ok: true };
 });
 
-const io = createWebSocketServer(fastify.server);
-fastify.decorate("io", io);
+const start = async () => {
+  try {
+    await loadVaultSecrets({ logger: fastify.log });
 
-fastify.listen({ port: 8003, host: "0.0.0.0" });
+    const io = createWebSocketServer(fastify.server);
+    fastify.decorate("io", io);
+
+    await fastify.listen({ port: 8003, host: "0.0.0.0" });
+  } catch (err) {
+    fastify.log.error(err);
+    process.exit(1);
+  }
+};
+
+start();

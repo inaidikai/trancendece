@@ -344,7 +344,7 @@ const getUserById = (req, res) => {
  */
 const googleAuthInit = (req, res) => {
   const clientId = process.env.GOOGLE_CLIENT_ID;
-  const redirectUri = process.env.GOOGLE_REDIRECT_URI || 'http://localhost:8081/auth/google/callback';
+  const redirectUri = process.env.GOOGLE_REDIRECT_URI || 'https://localhost:8081/auth/google/callback';
   
   if (!clientId) {
     return res.status(500).json({ error: 'Google OAuth not configured' });
@@ -385,7 +385,7 @@ const googleAuthCallback = async (req, res) => {
 
   const clientId = process.env.GOOGLE_CLIENT_ID;
   const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
-  const redirectUri = process.env.GOOGLE_REDIRECT_URI || 'http://localhost:8081/auth/google/callback';
+  const redirectUri = process.env.GOOGLE_REDIRECT_URI || 'https://localhost:8081/auth/google/callback';
 
   if (!clientId || !clientSecret) {
     return res.status(500).json({ error: 'Google OAuth not configured' });

@@ -1,9 +1,9 @@
 FROM node:20
 
-WORKDIR /app
-COPY package.json ./
+WORKDIR /app/backend/user-service
+COPY backend/user-service/package.json ./
 RUN npm install
-COPY . .
+COPY backend/user-service ./
 
 EXPOSE 8001
 CMD ["npm", "start"]

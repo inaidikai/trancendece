@@ -1,9 +1,11 @@
 const fastify = require("fastify");
 const httpProxy = require("@fastify/http-proxy");
 const jwtPlugin = require("./plugins/jwt");
+const { loadVaultSecrets } = require("../shared/vault");
 
 const app = fastify({ logger: true });
-const DEFAULT_ALLOWED_ORIGINS = ["http://localhost:5173", "http://127.0.0.1:5173"];
+const DEFAULT_ALLOWED_ORIGINS = ["https://localhost:5173", "https://127.0.0.1:5173"];
+let allowedOrigins = new Set(DEFAULT_ALLOWED_ORIGINS);
 
 function normalizeOrigin(origin) {
   return (origin || "").trim().replace(/\/+$/, "");
@@ -19,10 +21,12 @@ function getAllowedOrigins() {
   return configured.length ? configured : DEFAULT_ALLOWED_ORIGINS;
 }
 
-const allowedOrigins = new Set(getAllowedOrigins());
-
 function isAllowedOrigin(origin) {
   return allowedOrigins.has(normalizeOrigin(origin));
+}
+
+function refreshAllowedOrigins() {
+  allowedOrigins = new Set(getAllowedOrigins());
 }
 
 app.addHook("onRequest", async (request, reply) => {
@@ -47,9 +51,6 @@ app.addHook("onRequest", async (request, reply) => {
     return reply.code(403).send({ error: `CORS origin denied: ${origin}` });
   }
 });
-
-// Register JWT plugin
-app.register(jwtPlugin);
 
 // Health check
 app.get("/health", async () => {
@@ -82,6 +83,12 @@ app.register(httpProxy, {
 
 const start = async () => {
   try {
+    await loadVaultSecrets({ logger: app.log });
+    refreshAllowedOrigins();
+
+    // Register JWT plugin after Vault secrets load.
+    app.register(jwtPlugin);
+
     await app.listen({ port: 8080, host: "0.0.0.0" });
     console.log("API Gateway running on port 8080");
   } catch (err) {

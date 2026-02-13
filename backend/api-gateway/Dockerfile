@@ -1,10 +1,11 @@
 FROM node:20
 
-WORKDIR /app
+WORKDIR /app/backend/api-gateway
 # Only copy package.json so installs follow package.json (avoid stale package-lock)
-COPY package.json ./
+COPY backend/api-gateway/package.json ./
 RUN npm install
-COPY . .
+COPY backend/api-gateway ./
+COPY backend/shared ../shared
 
 EXPOSE 8080
 CMD ["npm", "start"]
