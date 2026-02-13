@@ -1,8 +1,6 @@
 services:
   auth-service:
     build: ../backend/auth-service
-    env_file:
-      - ../.env
     environment:
       - JWT_SECRET=dev-super-secret-change-me
       - PGHOST=postgres
@@ -10,11 +8,13 @@ services:
       - PGUSER=postgres
       - PGPASSWORD=postgres
       - PGDATABASE=auth_db
-      - GOOGLE_CLIENT_ID=867201760066-jn66gja6jhs94a0mhhsaor64numn9k7d.apps.googleusercontent.com
-      - GOOGLE_CLIENT_SECRET=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
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-your-client-id-here}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-your-client-secret-here}
       - GOOGLE_REDIRECT_URI=http://localhost:8081/auth/google/callback
     expose:
       - "8000"
+    depends_on:
+      - postgres
     networks:
       - internal
 
@@ -27,29 +27,15 @@ services:
 
   diary-service:
     build: ../backend/diary-service
-    environment:
-      - PORT=8002
-      - JWT_SECRET=dev-super-secret-change-me
-      - CORS_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
-      - PGHOST=postgres
-      - PGPORT=5432
-      - PGUSER=postgres
-      - PGPASSWORD=postgres
-      - PGDATABASE=auth_db
-      - WS_SERVER_URL=http://realtime-service:8003
-      - DIARY_REQUEST_BODY_LIMIT=10mb
     expose:
       - "8002"
     networks:
       - internal
-    depends_on:
-      - postgres
 
   realtime-service:
     build: ../backend/realtime-service
     environment:
       - JWT_SECRET=dev-super-secret-change-me
-      - CORS_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
       - PGHOST=postgres
       - PGPORT=5432
       - PGUSER=postgres
@@ -73,7 +59,6 @@ services:
       - realtime-service
     environment:
       - JWT_SECRET=dev-super-secret-change-me
-      - CORS_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
     ports:
       - "8080:8080"
     networks:

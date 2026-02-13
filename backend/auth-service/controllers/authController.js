@@ -57,6 +57,29 @@ const issueAndSendTwoFACode = (user, callback) => {
   });
 };
 
+// Password policy validation
+const validatePasswordPolicy = (password) => {
+  const errors = [];
+  
+  if (password.length < 8) {
+    errors.push('Password must be at least 8 characters');
+  }
+  if (!/[A-Z]/.test(password)) {
+    errors.push('Password must contain at least 1 uppercase letter (A-Z)');
+  }
+  if (!/[a-z]/.test(password)) {
+    errors.push('Password must contain at least 1 lowercase letter (a-z)');
+  }
+  if (!/[0-9]/.test(password)) {
+    errors.push('Password must contain at least 1 number (0-9)');
+  }
+  if (!/[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?`~]/.test(password)) {
+    errors.push('Password must contain at least 1 special character (!@#$%^&*()_+-=[]{}etc)');
+  }
+  
+  return errors;
+};
+
 // Register new user
 const register = (req, res) => {
   const { email, username, password, full_name } = req.body;
@@ -66,8 +89,13 @@ const register = (req, res) => {
     return res.status(400).json({ error: 'Email, username, and password are required' });
   }
 
-  if (password.length < 6) {
-    return res.status(400).json({ error: 'Password must be at least 6 characters' });
+  // Validate password policy
+  const policyErrors = validatePasswordPolicy(password);
+  if (policyErrors.length > 0) {
+    return res.status(400).json({ 
+      error: 'Password does not meet policy requirements',
+      details: policyErrors 
+    });
   }
 
   const userId = generateId();
