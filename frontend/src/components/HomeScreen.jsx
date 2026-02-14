@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import "./HomeScreen.css";
 import ConfirmationModal from "../app/components/ConfirmationModal";
 import { getMe } from "../auth/authApi";
@@ -94,9 +95,9 @@ export default function HomeScreen({ title = "Your Space to Create", children })
 
   return (
     <div className="home-screen">
-      <a href="/" className="home-logo-link" aria-label="Home">
+      <Link to="/world" className="home-logo-link" aria-label="World">
         <img src="/assets/mainLogo.png" alt="Logo" className="home-logo" />
-      </a>
+      </Link>
       <div className="home-content">
         <div className="title-section">
           <h1 className="main-title">{title}</h1>

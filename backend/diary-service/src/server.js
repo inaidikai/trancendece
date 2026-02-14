@@ -134,6 +134,22 @@ async function ensureCoreTables() {
   `);
 
   await pool.query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1
+        FROM information_schema.table_constraints
+        WHERE table_name = 'friend_requests'
+          AND constraint_name = 'friend_requests_status_check'
+      ) THEN
+        ALTER TABLE friend_requests
+        ADD CONSTRAINT friend_requests_status_check
+        CHECK (status IN ('pending', 'accepted', 'declined'));
+      END IF;
+    END $$;
+  `);
+
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS ws_connections (
       user_id TEXT PRIMARY KEY,
       socket_id TEXT,
@@ -143,8 +159,13 @@ async function ensureCoreTables() {
 
   await pool.query(`
     ALTER TABLE ws_connections
-    ADD COLUMN IF NOT EXISTS is_online BOOLEAN NOT NULL DEFAULT TRUE,
+    ADD COLUMN IF NOT EXISTS is_online BOOLEAN NOT NULL DEFAULT FALSE,
     ADD COLUMN IF NOT EXISTS connected_at TIMESTAMP NOT NULL DEFAULT NOW()
+  `);
+
+  await pool.query(`
+    ALTER TABLE ws_connections
+    ALTER COLUMN is_online SET DEFAULT FALSE
   `);
 
   await pool.query(`
@@ -161,7 +182,88 @@ async function ensureCoreTables() {
     ADD COLUMN IF NOT EXISTS title TEXT,
     ADD COLUMN IF NOT EXISTS cover_image TEXT,
     ADD COLUMN IF NOT EXISTS is_private BOOLEAN NOT NULL DEFAULT TRUE,
+    ADD COLUMN IF NOT EXISTS diary_type TEXT,
     ADD COLUMN IF NOT EXISTS created_at TIMESTAMP NOT NULL DEFAULT NOW()
+  `);
+
+  await pool.query(`
+    UPDATE diary_entries
+    SET diary_type = CASE WHEN is_private THEN 'private' ELSE 'collaborative' END
+    WHERE diary_type IS NULL
+  `);
+
+  await pool.query(`
+    ALTER TABLE diary_entries
+    ALTER COLUMN diary_type SET DEFAULT 'private'
+  `);
+
+  await pool.query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1
+        FROM information_schema.table_constraints
+        WHERE table_name = 'diary_entries'
+          AND constraint_name = 'diary_entries_diary_type_check'
+      ) THEN
+        ALTER TABLE diary_entries
+        ADD CONSTRAINT diary_entries_diary_type_check
+        CHECK (diary_type IN ('private', 'collaborative'));
+      END IF;
+    END $$;
+  `);
+
+  await pool.query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1
+        FROM information_schema.table_constraints
+        WHERE table_name = 'diary_entries'
+          AND constraint_name = 'diary_entries_privacy_alignment_check'
+      ) THEN
+        ALTER TABLE diary_entries
+        ADD CONSTRAINT diary_entries_privacy_alignment_check
+        CHECK (
+          (diary_type = 'private' AND is_private = TRUE)
+          OR
+          (diary_type = 'collaborative' AND is_private = FALSE)
+        );
+      END IF;
+    END $$;
+  `);
+
+  await pool.query(`
+    CREATE OR REPLACE FUNCTION enforce_single_diary_type_per_owner()
+    RETURNS TRIGGER AS $$
+    BEGIN
+      IF EXISTS (
+        SELECT 1
+        FROM diary_entries d
+        WHERE d.owner_id = NEW.owner_id
+          AND d.id <> NEW.id
+          AND COALESCE(d.diary_type, CASE WHEN d.is_private THEN 'private' ELSE 'collaborative' END)
+              = COALESCE(NEW.diary_type, CASE WHEN NEW.is_private THEN 'private' ELSE 'collaborative' END)
+      ) THEN
+        RAISE EXCEPTION 'Owner already has a % diary',
+          COALESCE(NEW.diary_type, CASE WHEN NEW.is_private THEN 'private' ELSE 'collaborative' END)
+          USING ERRCODE = '23514';
+      END IF;
+      RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql;
+  `);
+
+  await pool.query(`
+    DROP TRIGGER IF EXISTS trg_enforce_single_diary_type_per_owner ON diary_entries
+  `);
+
+  await pool.query(`
+    CREATE TRIGGER trg_enforce_single_diary_type_per_owner
+    BEFORE INSERT OR UPDATE OF owner_id, diary_type, is_private
+    ON diary_entries
+    FOR EACH ROW
+    EXECUTE FUNCTION enforce_single_diary_type_per_owner()
   `);
 
   await pool.query(`
@@ -184,8 +286,92 @@ async function ensureCoreTables() {
   `);
 
   await pool.query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1
+        FROM information_schema.table_constraints
+        WHERE table_name = 'collaborators'
+          AND constraint_name = 'collaborators_status_check'
+      ) THEN
+        ALTER TABLE collaborators
+        ADD CONSTRAINT collaborators_status_check
+        CHECK (status IN ('pending', 'accepted', 'declined', 'removed'));
+      END IF;
+    END $$;
+  `);
+
+  await pool.query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1
+        FROM information_schema.table_constraints
+        WHERE table_name = 'collaborators'
+          AND constraint_name = 'collaborators_role_check'
+      ) THEN
+        ALTER TABLE collaborators
+        ADD CONSTRAINT collaborators_role_check
+        CHECK (role IN ('viewer', 'editor'));
+      END IF;
+    END $$;
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS notifications (
+      id TEXT PRIMARY KEY,
+      recipient_id TEXT NOT NULL,
+      sender_id TEXT,
+      type TEXT NOT NULL,
+      entity_type TEXT NOT NULL,
+      entity_id TEXT,
+      title TEXT NOT NULL,
+      message TEXT NOT NULL,
+      metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+      is_read BOOLEAN NOT NULL DEFAULT FALSE,
+      read_at TIMESTAMP,
+      is_archived BOOLEAN NOT NULL DEFAULT FALSE,
+      archived_at TIMESTAMP,
+      created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_notifications_recipient_created
+    ON notifications (recipient_id, created_at DESC)
+  `);
+
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_notifications_recipient_unread
+    ON notifications (recipient_id, is_read, is_archived)
+  `);
+
+  await pool.query(`
     CREATE INDEX IF NOT EXISTS idx_diary_entries_owner_updated
     ON diary_entries (owner_id, updated_at DESC)
+  `);
+
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_diary_entries_owner_type
+    ON diary_entries (owner_id, diary_type)
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS activity_log (
+      id SERIAL PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      action TEXT NOT NULL,
+      entity_type TEXT,
+      entity_id TEXT,
+      metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+      created_at TIMESTAMP NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_activity_log_user_created
+    ON activity_log (user_id, created_at DESC)
   `);
 
   await pool.query(`

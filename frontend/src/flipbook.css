@@ -16,8 +16,8 @@ html, #root { height: 100%; }
 
 /* your flipbook CSS */
 :root {
-  --page-width: clamp(340px, 46vw, 480px);
-  --book-height: clamp(260px, 46vh, 400px);
+  --page-width: clamp(150px, 42vw, 182px);
+  --book-height: clamp(250px, 55vh, 330px);
   --page-height: calc(var(--book-height) - 20px);
   --book-width: calc(var(--page-width) * 2 + var(--fold-width));
   --flip-duration: 0.8s;
@@ -31,10 +31,10 @@ html, #root { height: 100%; }
   --fold-width: 2px;
   --fold-line: rgba(0, 0, 0, 0.7);
   --fold-shadow: rgba(0, 0, 0, 0.12);
-  --page-pad-top: 24px;
-  --page-pad-side: 24px;
-  --inner-gutter: clamp(1.6rem, 4.5vw, 2.2rem);
-  --outer-gutter: clamp(0.9rem, 3vw, 1.2rem);
+  --page-pad-top: 14px;
+  --page-pad-side: 14px;
+  --inner-gutter: clamp(0.9rem, 3.4vw, 1.2rem);
+  --outer-gutter: clamp(0.6rem, 2.2vw, 0.9rem);
   --shadow: none;
   --closed-shadow: 0 22px 40px rgba(0, 0, 0, 0.35), 0 6px 12px rgba(0, 0, 0, 0.25);
   --closed-edge: rgba(255, 255, 255, 0.12);
@@ -852,6 +852,54 @@ html, #root { height: 100%; }
   color: rgba(35, 4, 1, 0.6);
 }
 
+@media (max-width: 768px) {
+  .sticker-popover {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    width: min(92vw, 360px);
+    height: min(72dvh, 520px);
+    transform: translate(-50%, -50%);
+    padding: 8px;
+    z-index: 1200;
+  }
+
+  .sticker-popover-content {
+    padding: 10px;
+  }
+
+  .sticker-popover-title {
+    font-size: 18px;
+  }
+
+  .sticker-popover-subtitle {
+    font-size: 12px;
+  }
+
+  .sticker-filter-chip {
+    padding: 7px 12px;
+    font-size: 12px;
+  }
+
+  .sticker-popover-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+    padding: 4px;
+  }
+}
+
+@media (max-width: 480px) {
+  .sticker-popover {
+    width: min(94vw, 336px);
+    height: min(74dvh, 500px);
+  }
+
+  .sticker-popover-close {
+    width: 30px;
+    height: 30px;
+  }
+}
+
 
 @keyframes dropdown-fade-in {
   from {
@@ -1397,10 +1445,34 @@ html, #root { height: 100%; }
   pointer-events: none;
 }
 
+@media (max-width: 767px) {
+  .book {
+    border-radius: 0 10px 10px 0;
+    box-shadow:
+      0 16px 34px rgba(0, 0, 0, 0.42),
+      0 6px 12px rgba(0, 0, 0, 0.25);
+  }
+
+  .cover,
+  .back-cover,
+  .page {
+    border-radius: 0 10px 10px 0;
+  }
+
+  .book .book-nav {
+    width: 36px;
+    height: 36px;
+    font-size: 26px;
+    border-width: 1.5px;
+  }
+}
+
 @media (min-width: 768px) {
   :root {
     --page-width: clamp(300px, 34vw, 420px);
     --book-height: clamp(420px, 70vh, 560px);
+    --page-pad-top: 22px;
+    --page-pad-side: 20px;
     --inner-gutter: 2.1rem;
     --outer-gutter: 1.2rem;
   }
@@ -1410,6 +1482,8 @@ html, #root { height: 100%; }
   :root {
     --page-width: clamp(340px, 28vw, 460px);
     --book-height: clamp(440px, 68vh, 600px);
+    --page-pad-top: 24px;
+    --page-pad-side: 24px;
     --inner-gutter: 2.4rem;
     --outer-gutter: 1.3rem;
   }

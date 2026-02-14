@@ -85,3 +85,38 @@
     transform: scale(1);
   }
 }
+
+@media (min-width: 1025px) {
+  .mic-tool-button {
+    width: 102px;
+    height: 124px;
+  }
+
+  .mic-tool-button .mic-icon-img {
+    width: 108px;
+    height: 108px;
+  }
+
+  .mic-tool-button.active {
+    transform: translateY(-20px) scale(1.1);
+  }
+
+  .listening-ring {
+    width: 112px;
+    height: 112px;
+  }
+}
+
+@media (max-width: 768px) {
+  .listening-ring {
+    width: 76px;
+    height: 76px;
+  }
+}
+
+@media (max-width: 480px) {
+  .listening-ring {
+    width: 64px;
+    height: 64px;
+  }
+}

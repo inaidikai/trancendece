@@ -1,0 +1,78 @@
+.global-friend-toast {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 11000;
+  min-width: 260px;
+  max-width: min(92vw, 360px);
+  border: 2px solid #d5cbb8;
+  border-radius: 14px;
+  background: #f8f1de;
+  color: #2f1813;
+  padding: 12px 14px;
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.2);
+  pointer-events: auto;
+}
+
+.global-friend-toast--info {
+  background: #e9f3ff;
+  border-color: #c1d4ea;
+  color: #23374f;
+}
+
+.global-friend-toast--stacked {
+  bottom: 120px;
+}
+
+.global-friend-toast__message {
+  font-size: 14px;
+  line-height: 1.35;
+  margin-bottom: 8px;
+}
+
+.global-friend-toast__message--info {
+  margin-bottom: 0;
+}
+
+.global-friend-toast__actions {
+  display: flex;
+  gap: 10px;
+}
+
+.global-friend-toast__btn {
+  border: none;
+  background: transparent;
+  color: #5d3a32;
+  text-decoration: underline;
+  cursor: pointer;
+  font-size: 14px;
+  padding: 0;
+}
+
+.global-friend-toast__btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.global-friend-toast__btn--danger {
+  color: #8b332f;
+}
+
+.global-friend-toast__error {
+  margin-top: 8px;
+  color: #8b332f;
+  font-size: 12px;
+}
+
+@media (max-width: 680px) {
+  .global-friend-toast {
+    right: 12px;
+    left: 12px;
+    bottom: 12px;
+    max-width: none;
+  }
+
+  .global-friend-toast--stacked {
+    bottom: 96px;
+  }
+}

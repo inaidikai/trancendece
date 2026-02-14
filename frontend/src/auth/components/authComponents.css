@@ -73,6 +73,13 @@
   background: #fff1ed;
 }
 
+.auth-input.readonly-input:disabled {
+  background: #f2ebdc;
+  color: #5b4942;
+  opacity: 1;
+  cursor: not-allowed;
+}
+
 .auth-input-help {
   font-size: 13px;
   color: #8a2d23;
@@ -115,6 +122,10 @@
 
 .auth-button.block {
   width: 100%;
+}
+
+.auth-submit-spacing {
+  margin-top: 40px;
 }
 
 .auth-button.disabled {
@@ -208,6 +219,10 @@
   .auth-button {
     padding: 10px 14px;
     font-size: 16px;
+  }
+
+  .auth-submit-spacing {
+    margin-top: 8px;
   }
 
   .otp-input {

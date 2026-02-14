@@ -8,7 +8,7 @@ const DIARY_COLLAB_WS_EVENTS = require("./realtime/constants/diaryCollabWsEvents
 const presence = require("./realtime/handlers/presence");
 const friends = require("./realtime/handlers/friends");
 const collab = require("./realtime/handlers/collaboration");
-const registerNotifications = require("./realtime/handlers/notification");
+const { registerNotificationHandlers } = require("./realtime/handlers/notification");
 
 // --------------------
 // Socket-friendly rate limit
@@ -85,11 +85,16 @@ module.exports = async function registerLola(io, socket) {
     await collab.handleStateRequest(io, socket, userId, entryId);
   });
 
-  registerNotifications(io, socket);
+  registerNotificationHandlers(io, socket);
 
   // Disconnect cleanup
   socket.on("disconnect", async () => {
     try {
+      const roomName = `user_${userId}`;
+      const remainingSockets = io.sockets.adapter.rooms.get(roomName)?.size || 0;
+      if (remainingSockets > 0) {
+        return;
+      }
       if (presence?.setUserOffline) await presence.setUserOffline(userId, io);
     } catch (e) {
       console.error("setUserOffline failed:", e.message);

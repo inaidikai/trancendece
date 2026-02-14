@@ -1,9 +1,46 @@
 const pool = require('../db/connection');
+const NotificationService = require('../services/notificationService');
+const ActivityLogService = require('../services/activityLogService');
 
 class UsersController {
+  static async ensureWelcomeNotification(user) {
+    const userId = user && user.id;
+    if (!userId) return;
+
+    await NotificationService.ensureSchema();
+
+    const existing = await pool.query(
+      `SELECT 1
+       FROM notifications
+       WHERE recipient_id = $1 AND type = 'welcome_message'
+       LIMIT 1`,
+      [userId]
+    );
+
+    if (existing.rows.length > 0) {
+      return;
+    }
+
+    const displayName = user.full_name || user.username || 'there';
+
+    await NotificationService.createNotification({
+      recipientId: userId,
+      senderId: null,
+      type: 'welcome_message',
+      entityType: 'system',
+      entityId: userId,
+      title: 'Welcome to Quillow',
+      message: `Welcome ${displayName}! Start creating your space with friends.`,
+      metadata: {
+        category: 'system',
+        priority: 'low'
+      }
+    });
+  }
+
   // Get current user profile
   static async getMyProfile(req, res) {
-    const userId = req.user.userId;
+    const userId = req.user.userId || req.user.id;
 
     try {
       const result = await pool.query(
@@ -26,7 +63,15 @@ class UsersController {
         return res.status(404).json({ error: 'User not found' });
       }
 
-      res.json({ user: result.rows[0] });
+      const user = result.rows[0];
+
+      try {
+        await UsersController.ensureWelcomeNotification(user);
+      } catch (welcomeError) {
+        console.error('Welcome notification setup failed:', welcomeError.message);
+      }
+
+      res.json({ user });
     } catch (error) {
       console.error('Get profile error:', error);
       res.status(500).json({ error: 'Failed to get profile' });
@@ -35,7 +80,7 @@ class UsersController {
 
   // Update profile
   static async updateProfile(req, res) {
-    const userId = req.user.userId;
+    const userId = req.user.userId || req.user.id;
     const { fullName, avatar, bio } = req.body;
 
     try {
@@ -72,6 +117,18 @@ class UsersController {
 
       const result = await pool.query(query, values);
 
+      await ActivityLogService.log({
+        userId,
+        action: 'profile_updated',
+        entityType: 'user',
+        entityId: userId,
+        metadata: {
+          fullNameUpdated: fullName !== undefined,
+          avatarUpdated: avatar !== undefined,
+          bioUpdated: bio !== undefined,
+        },
+      });
+
       res.json({
         message: 'Profile updated',
         user: result.rows[0]
@@ -85,7 +142,7 @@ class UsersController {
   // Search users
   static async searchUsers(req, res) {
     const { q } = req.query;
-    const userId = req.user.userId;
+    const userId = req.user.userId || req.user.id;
 
     if (!q || q.length < 2) {
       return res.status(400).json({ error: 'Search query must be at least 2 characters' });
@@ -126,7 +183,7 @@ class UsersController {
   // Get user profile by ID
   static async getUserProfile(req, res) {
     const { userId } = req.params;
-    const currentUserId = req.user.userId;
+    const currentUserId = req.user.userId || req.user.id;
 
     try {
       const result = await pool.query(
@@ -143,7 +200,7 @@ class UsersController {
           ) as is_friend,
           EXISTS(
             SELECT 1 FROM ws_connections 
-            WHERE user_id = u.id AND socket_id IS NOT NULL
+            WHERE user_id = u.id AND is_online = TRUE
           ) as is_online
          FROM users u
          WHERE u.id = $1`,

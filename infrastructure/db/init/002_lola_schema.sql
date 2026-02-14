@@ -64,6 +64,32 @@ CREATE INDEX IF NOT EXISTS idx_collaborators_status ON collaborators(status);
 CREATE INDEX IF NOT EXISTS idx_collaborators_invited_by ON collaborators(invited_by);
 
 -- ============================================
+-- NOTIFICATIONS TABLE
+-- ============================================
+CREATE TABLE IF NOT EXISTS notifications (
+  id VARCHAR(255) PRIMARY KEY,
+  recipient_id VARCHAR(255) NOT NULL,
+  sender_id VARCHAR(255),
+  type VARCHAR(120) NOT NULL,
+  entity_type VARCHAR(80) NOT NULL,
+  entity_id VARCHAR(255),
+  title TEXT NOT NULL,
+  message TEXT NOT NULL,
+  metadata JSONB DEFAULT '{}'::jsonb,
+  is_read BOOLEAN DEFAULT FALSE,
+  read_at TIMESTAMP,
+  is_archived BOOLEAN DEFAULT FALSE,
+  archived_at TIMESTAMP,
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_notifications_recipient_created
+  ON notifications(recipient_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_notifications_recipient_unread
+  ON notifications(recipient_id, is_read, is_archived);
+
+-- ============================================
 -- UPDATE diary_entries TO ADD MISSING COLUMNS
 -- ============================================
 ALTER TABLE diary_entries 

@@ -90,6 +90,11 @@ module.exports = async function registerLola(io, socket) {
   // Disconnect cleanup
   socket.on("disconnect", async () => {
     try {
+      const roomName = `user_${userId}`;
+      const remainingSockets = io.sockets.adapter.rooms.get(roomName)?.size || 0;
+      if (remainingSockets > 0) {
+        return;
+      }
       if (presence?.setUserOffline) await presence.setUserOffline(userId, io);
     } catch (e) {
       console.error("setUserOffline failed:", e.message);

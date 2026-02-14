@@ -1,11 +1,23 @@
 const pool = require('../db/connection');
 const NotificationService = require('../services/notificationService');
+const ActivityLogService = require('../services/activityLogService');
 const crypto = require('crypto');
 
 class FriendsController {
+  static resolveRequestId(req) {
+    return (
+      req.params?.requestId ||
+      req.query?.requestId ||
+      req.query?.request_id ||
+      req.body?.requestId ||
+      req.body?.request_id ||
+      ""
+    );
+  }
+
   // Get all friends with online status
   static async getFriends(req, res) {
-    const userId = req.user.userId;
+    const userId = req.user.userId || req.user.id;
 
     try {
       const result = await pool.query(
@@ -18,7 +30,7 @@ class FriendsController {
           f.created_at as friends_since,
           EXISTS(
             SELECT 1 FROM ws_connections 
-            WHERE user_id = u.id AND socket_id IS NOT NULL
+            WHERE user_id = u.id AND is_online = TRUE
           ) as is_online
          FROM friends f
          JOIN users u ON f.friend_id = u.id
@@ -39,7 +51,7 @@ class FriendsController {
 
   // Send friend request
   static async sendRequest(req, res) {
-    const senderId = req.user.userId;
+    const senderId = req.user.userId || req.user.id;
     const { receiverId: receiverIdInput, username, message } = req.body;
     let receiverId = receiverIdInput;
 
@@ -117,6 +129,16 @@ class FriendsController {
 
       const request = result.rows[0];
 
+      await ActivityLogService.log({
+        userId: senderId,
+        action: 'friend_request_sent',
+        entityType: 'friend_request',
+        entityId: request.id,
+        metadata: {
+          receiverId,
+        },
+      });
+
       // Get sender info for notification
       const senderInfo = await pool.query(
         `SELECT username, full_name, COALESCE(to_jsonb(users)->>'avatar_url', to_jsonb(users)->>'avatar') AS avatar FROM users WHERE id = $1`,
@@ -162,7 +184,7 @@ class FriendsController {
 
   // Get pending friend requests (received)
   static async getPendingRequests(req, res) {
-    const userId = req.user.userId;
+    const userId = req.user.userId || req.user.id;
     const scope = (req.query.scope || 'sent').toLowerCase();
 
     try {
@@ -250,7 +272,7 @@ class FriendsController {
 
   // Cancel sent friend request
   static async cancelRequest(req, res) {
-    const userId = req.user.userId;
+    const userId = req.user.userId || req.user.id;
     const { requestId } = req.params;
 
     try {
@@ -265,6 +287,14 @@ class FriendsController {
         return res.status(404).json({ error: 'Pending request not found' });
       }
 
+      await ActivityLogService.log({
+        userId,
+        action: 'friend_request_cancelled',
+        entityType: 'friend_request',
+        entityId: requestId,
+        metadata: {},
+      });
+
       res.json({ message: 'Friend request cancelled' });
     } catch (error) {
       console.error('Cancel friend request error:', error);
@@ -274,8 +304,12 @@ class FriendsController {
 
   // Accept friend request
   static async acceptRequest(req, res) {
-    const userId = req.user.userId;
-    const { requestId } = req.params;
+    const userId = req.user.userId || req.user.id;
+    const requestId = FriendsController.resolveRequestId(req);
+
+    if (!requestId) {
+      return res.status(400).json({ error: 'Request ID is required' });
+    }
 
     try {
       // Get request details
@@ -307,7 +341,8 @@ class FriendsController {
         // Create friendship (bidirectional)
         await client.query(
           `INSERT INTO friends (user_id, friend_id)
-           VALUES ($1, $2), ($2, $1)`,
+           VALUES ($1, $2), ($2, $1)
+           ON CONFLICT (user_id, friend_id) DO NOTHING`,
           [userId, request.sender_id]
         );
 
@@ -320,6 +355,16 @@ class FriendsController {
         );
 
         const username = userInfo.rows[0].username;
+
+        await ActivityLogService.log({
+          userId,
+          action: 'friend_request_accepted',
+          entityType: 'friend_request',
+          entityId: request.id,
+          metadata: {
+            senderId: request.sender_id,
+          },
+        });
 
         try {
           await NotificationService.createNotification({
@@ -357,8 +402,12 @@ class FriendsController {
 
   // Decline friend request
   static async declineRequest(req, res) {
-    const userId = req.user.userId;
-    const { requestId } = req.params;
+    const userId = req.user.userId || req.user.id;
+    const requestId = FriendsController.resolveRequestId(req);
+
+    if (!requestId) {
+      return res.status(400).json({ error: 'Request ID is required' });
+    }
 
     try {
       const result = await pool.query(
@@ -373,6 +422,45 @@ class FriendsController {
         return res.status(404).json({ error: 'Request not found' });
       }
 
+      const request = result.rows[0];
+
+      await ActivityLogService.log({
+        userId,
+        action: 'friend_request_declined',
+        entityType: 'friend_request',
+        entityId: request.id,
+        metadata: {
+          senderId: request.sender_id,
+        },
+      });
+
+      const receiverInfo = await pool.query(
+        `SELECT username FROM users WHERE id = $1`,
+        [userId]
+      );
+
+      const receiverUsername = receiverInfo.rows[0]?.username || 'A user';
+
+      try {
+        await NotificationService.createNotification({
+          recipientId: request.sender_id,
+          senderId: userId,
+          type: 'friend_request_declined',
+          entityType: 'friend_request',
+          entityId: request.id,
+          title: 'Friend Request Declined',
+          message: `${receiverUsername} declined your friend request`,
+          metadata: {
+            requestId: request.id,
+            userId,
+            username: receiverUsername,
+            priority: 'low'
+          }
+        });
+      } catch (notifyError) {
+        console.error('Friend declined notification failed:', notifyError.message);
+      }
+
       res.json({ message: 'Friend request declined' });
     } catch (error) {
       console.error('Decline friend request error:', error);
@@ -382,17 +470,55 @@ class FriendsController {
 
   // Remove friend
   static async removeFriend(req, res) {
-    const userId = req.user.userId;
+    const userId = req.user.userId || req.user.id;
     const { friendId } = req.params;
 
     try {
+      const userInfo = await pool.query(
+        `SELECT username AS actor_username FROM users WHERE id = $1`,
+        [userId]
+      );
+
       // Delete friendship (both directions)
-      await pool.query(
+      const result = await pool.query(
         `DELETE FROM friends 
          WHERE (user_id = $1 AND friend_id = $2) 
-            OR (user_id = $2 AND friend_id = $1)`,
+            OR (user_id = $2 AND friend_id = $1)
+         RETURNING user_id, friend_id`,
         [userId, friendId]
       );
+
+      const wasRemoved = result.rows.length > 0;
+      const actorUsername = userInfo.rows[0]?.actor_username || 'A friend';
+
+      if (wasRemoved) {
+        await ActivityLogService.log({
+          userId,
+          action: 'friend_removed',
+          entityType: 'friendship',
+          entityId: friendId,
+          metadata: {},
+        });
+
+        try {
+          await NotificationService.createNotification({
+            recipientId: friendId,
+            senderId: userId,
+            type: 'friend_removed',
+            entityType: 'friendship',
+            entityId: userId,
+            title: 'Friend Removed',
+            message: `${actorUsername} removed you from friends`,
+            metadata: {
+              friendId: userId,
+              friendUsername: actorUsername,
+              priority: 'medium'
+            }
+          });
+        } catch (notifyError) {
+          console.error('Friend removed notification failed:', notifyError.message);
+        }
+      }
 
       res.json({ message: 'Friend removed' });
     } catch (error) {
