@@ -3,13 +3,13 @@ const pool = require('../db/connection');
 class NotificationsController {
   // Get notifications with pagination
   static async getNotifications(req, res) {
-    const userId = req.user.userId;
+    const userId = req.user.userId || req.user.id;
     const { limit = 20, offset = 0, unreadOnly = false } = req.query;
 
     try {
       let query = `
         SELECT * FROM notifications
-        WHERE user_id = $1 AND is_archived = FALSE
+        WHERE recipient_id = $1 AND is_archived = FALSE
       `;
       
       const params = [userId];
@@ -26,7 +26,7 @@ class NotificationsController {
       // Get total count
       const countResult = await pool.query(
         `SELECT COUNT(*) as total FROM notifications 
-         WHERE user_id = $1 AND is_archived = FALSE ${unreadOnly === 'true' ? 'AND is_read = FALSE' : ''}`,
+         WHERE recipient_id = $1 AND is_archived = FALSE ${unreadOnly === 'true' ? 'AND is_read = FALSE' : ''}`,
         [userId]
       );
 
@@ -44,12 +44,12 @@ class NotificationsController {
 
   // Get unread count
   static async getUnreadCount(req, res) {
-    const userId = req.user.userId;
+    const userId = req.user.userId || req.user.id;
 
     try {
       const result = await pool.query(
         `SELECT COUNT(*) as count FROM notifications 
-         WHERE user_id = $1 AND is_read = FALSE AND is_archived = FALSE`,
+         WHERE recipient_id = $1 AND is_read = FALSE AND is_archived = FALSE`,
         [userId]
       );
 
@@ -62,14 +62,14 @@ class NotificationsController {
 
   // Mark notification as read
   static async markAsRead(req, res) {
-    const userId = req.user.userId;
+    const userId = req.user.userId || req.user.id;
     const { id } = req.params;
 
     try {
       const result = await pool.query(
         `UPDATE notifications 
          SET is_read = TRUE, read_at = NOW()
-         WHERE id = $1 AND user_id = $2
+         WHERE id = $1 AND recipient_id = $2
          RETURNING *`,
         [id, userId]
       );
@@ -87,13 +87,13 @@ class NotificationsController {
 
   // Mark all as read
   static async markAllAsRead(req, res) {
-    const userId = req.user.userId;
+    const userId = req.user.userId || req.user.id;
 
     try {
       const result = await pool.query(
         `UPDATE notifications 
          SET is_read = TRUE, read_at = NOW()
-         WHERE user_id = $1 AND is_read = FALSE
+         WHERE recipient_id = $1 AND is_read = FALSE
          RETURNING id`,
         [userId]
       );
@@ -110,13 +110,13 @@ class NotificationsController {
 
   // Delete notification
   static async deleteNotification(req, res) {
-    const userId = req.user.userId;
+    const userId = req.user.userId || req.user.id;
     const { id } = req.params;
 
     try {
       const result = await pool.query(
         `DELETE FROM notifications 
-         WHERE id = $1 AND user_id = $2
+         WHERE id = $1 AND recipient_id = $2
          RETURNING id`,
         [id, userId]
       );

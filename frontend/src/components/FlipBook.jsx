@@ -14,13 +14,15 @@ import {
   getMyDiaryProfile,
   inviteCollaborator,
   removeCollaborator,
+  sendFriendRequest,
   searchUsers,
   updateEntry,
 } from "../app/api/diaryApi";
+import { makeSocket } from "../socket";
 
-const STORAGE_KEY = "diary-pages-v1";
+const STORAGE_KEY_PREFIX = "diary-pages-v1:";
 const DEFAULT_PAGES = 3;
-const DEFAULT_FONT = '"Baloo Thambi 2", sans-serif';
+const DEFAULT_FONT = '"Baloo 2", sans-serif';
 const DEFAULT_COLOR = "#000000";
 const DEFAULT_TEXT_SIZE = 16;
 const MIN_TEXT_SIZE = 10;
@@ -28,6 +30,9 @@ const MAX_TEXT_SIZE = 72;
 const PAGE_BOUNDS = { width: 400, height: 500 };
 const DELETE_ANIM_MS = 280;
 const PAGE_RENDER_RADIUS = 8;
+const DIARY_TYPE_PRIVATE = "private";
+const DIARY_TYPE_COLLABORATIVE = "collaborative";
+const ACTIVE_DIARY_ENTRY_STORAGE_PREFIX = "activeDiaryEntryId:";
 
 const COLLAB_COLORS = [
   "#BCC15B",
@@ -43,6 +48,18 @@ const COLLAB_COLORS = [
 ];
 
 const FALLBACK_ENTRY_TITLE = "My Diary";
+const COLLAB_HOME_ROUTE = "/home?mode=collab";
+const COLLAB_WS_EVENTS = {
+  JOIN_ROOM: "join_entry_room",
+  LEAVE_ROOM: "leave_entry_room",
+  ENTRY_EDIT: "entry_edit",
+  ENTRY_CURSOR_MOVE: "entry_cursor_move",
+  ENTRY_CURSOR_CLEAR: "entry_cursor_clear",
+  STATE_REQUEST: "state_request",
+  STATE_RESPONSE: "state_response",
+  ACCESS_DENIED: "access_denied",
+  NOTIFICATION_CREATED: "notification:created",
+};
 
 const hashString = (value = "") => {
   let hash = 0;
@@ -65,7 +82,6 @@ const TOOL_KEYS = {
 };
 
 const FONT_OPTIONS = [
-  "Srbija Sans",
   "Baloo Thambi 2",
   "Inter",
   "Roboto",
@@ -168,7 +184,6 @@ const FONT_OPTIONS = [
   "Press Start 2P",
   "VT323",
   "Pixelify Sans",
-  "Pixellify Sans",
   "Orbitron",
   "Audiowide",
   "Black Ops One",
@@ -202,8 +217,43 @@ const FONT_OPTIONS = [
   "Times New Roman",
   "Courier New",
   "Segoe UI",
-  "System UI",
 ];
+
+const SYSTEM_FONT_OPTIONS = new Set([
+  "Arial",
+  "Verdana",
+  "Tahoma",
+  "Trebuchet MS",
+  "Georgia",
+  "Times New Roman",
+  "Courier New",
+  "Segoe UI",
+]);
+
+const loadedFontStylesheets = new Set();
+
+const normalizeFontName = (value = "") =>
+  String(value)
+    .split(",")[0]
+    .replace(/["']/g, "")
+    .trim();
+
+const ensureFontIsLoaded = (fontName) => {
+  if (typeof document === "undefined") return;
+  if (!fontName || SYSTEM_FONT_OPTIONS.has(fontName)) return;
+  if (loadedFontStylesheets.has(fontName)) return;
+
+  const linkId = `gf-${fontName.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
+  if (!document.getElementById(linkId)) {
+    const link = document.createElement("link");
+    link.id = linkId;
+    link.rel = "stylesheet";
+    link.href = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(fontName).replace(/%20/g, "+")}&display=swap`;
+    document.head.appendChild(link);
+  }
+
+  loadedFontStylesheets.add(fontName);
+};
 
 
 const STICKERS = [
@@ -465,8 +515,6 @@ const createId = () => {
   return `id-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 };
 
-const stripHtml = (value) => value.replace(/<[^>]*>/g, "");
-
 const createTextBlock = ({ x, y, font, color, text, fontSize, width, height }) => ({
   id: createId(),
   type: "text",
@@ -521,14 +569,24 @@ const createEmptyPage = () => ({
   backBlocks: [],
 });
 
+const createDefaultPages = (count = DEFAULT_PAGES) =>
+  Array.from({ length: count }, () => createEmptyPage());
+
 const normalizePages = (pages) =>
   pages.map((page) => ({
     frontBlocks: Array.isArray(page.frontBlocks) ? page.frontBlocks : [],
     backBlocks: Array.isArray(page.backBlocks) ? page.backBlocks : [],
   }));
 
-const loadPages = () => {
-  const stored = localStorage.getItem(STORAGE_KEY);
+const getStorageUserScope = (userId) => {
+  const normalized = String(userId || "").trim();
+  return normalized || "anonymous";
+};
+
+const loadPages = (diaryType = DIARY_TYPE_PRIVATE, userId = null) => {
+  const normalizedDiaryType = normalizeDiaryType(diaryType, DIARY_TYPE_PRIVATE);
+  const storageKey = getPagesStorageKey(normalizedDiaryType, userId);
+  const stored = localStorage.getItem(storageKey);
   if (stored) {
     try {
       const parsed = JSON.parse(stored);
@@ -540,42 +598,7 @@ const loadPages = () => {
     }
   }
 
-  const legacyCount = parseInt(localStorage.getItem("page-count") || "", 10);
-  const count = Number.isFinite(legacyCount) && legacyCount > 0 ? legacyCount : DEFAULT_PAGES;
-
-  return Array.from({ length: count }, (_, index) => {
-    const frontText = localStorage.getItem(`page-${index}-front`) || "";
-    const backText = localStorage.getItem(`page-${index}-back`) || "";
-    const frontColor = localStorage.getItem(`page-${index}-front-color`) || DEFAULT_COLOR;
-    const backColor = localStorage.getItem(`page-${index}-back-color`) || DEFAULT_COLOR;
-    const frontFont = localStorage.getItem(`page-${index}-front-font`) || DEFAULT_FONT;
-    const backFont = localStorage.getItem(`page-${index}-back-font`) || DEFAULT_FONT;
-
-    return {
-      frontBlocks: frontText
-        ? [
-            createTextBlock({
-              x: 0,
-              y: 0,
-              text: stripHtml(frontText),
-              font: frontFont,
-              color: frontColor,
-            }),
-          ]
-        : [],
-      backBlocks: backText
-        ? [
-            createTextBlock({
-              x: 0,
-              y: 0,
-              text: stripHtml(backText),
-              font: backFont,
-              color: backColor,
-            }),
-          ]
-        : [],
-    };
-  });
+  return createDefaultPages();
 };
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
@@ -593,6 +616,50 @@ const parseEntryPages = (content) => {
   }
   return null;
 };
+
+const parseBooleanLike = (value) => {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === "true") return true;
+    if (normalized === "false") return false;
+  }
+  return null;
+};
+
+const normalizeDiaryType = (value, fallback = DIARY_TYPE_PRIVATE) => {
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === DIARY_TYPE_PRIVATE || normalized === DIARY_TYPE_COLLABORATIVE) {
+      return normalized;
+    }
+  }
+  return fallback;
+};
+
+const getEntryDiaryType = (entry, fallback = null) => {
+  const normalizedType = normalizeDiaryType(entry?.diary_type, "");
+  if (normalizedType) return normalizedType;
+
+  const privacyFlag = parseBooleanLike(entry?.is_private ?? entry?.isPrivate);
+  if (privacyFlag === true) return DIARY_TYPE_PRIVATE;
+  if (privacyFlag === false) return DIARY_TYPE_COLLABORATIVE;
+  return fallback;
+};
+
+const matchesDiaryType = (entry, requestedDiaryType) => {
+  const expectedType = normalizeDiaryType(requestedDiaryType, DIARY_TYPE_PRIVATE);
+  const resolvedType = getEntryDiaryType(entry);
+  if (resolvedType) return resolvedType === expectedType;
+  // Legacy rows without diary metadata are treated as private only.
+  return expectedType === DIARY_TYPE_PRIVATE;
+};
+
+const getDiaryStorageKey = (diaryType, userId = null) =>
+  `${ACTIVE_DIARY_ENTRY_STORAGE_PREFIX}${getStorageUserScope(userId)}:${normalizeDiaryType(diaryType)}`;
+
+const getPagesStorageKey = (diaryType, userId) =>
+  `${STORAGE_KEY_PREFIX}${getStorageUserScope(userId)}:${normalizeDiaryType(diaryType)}`;
 
 const normalizeCollaboratorRows = (rows = [], fallbackOwner = "Owner") => {
   const ownerRow = rows.find((row) => row.role === "owner");
@@ -633,7 +700,10 @@ export default function FlipBook({
 }) {
   const navigate = useNavigate();
   const { id: routeEntryId } = useParams();
-  const [pages, setPages] = useState(() => loadPages());
+  const requestedDiaryType = collaborationEnabled
+    ? DIARY_TYPE_COLLABORATIVE
+    : DIARY_TYPE_PRIVATE;
+  const [pages, setPages] = useState(() => createDefaultPages());
   const [current, setCurrent] = useState(0);
   const [isOpen] = useState(true);
   const [active, setActive] = useState({ index: 0, side: "front" });
@@ -658,6 +728,7 @@ export default function FlipBook({
     name: currentUser?.name || currentUser?.username || "",
   }));
   const [entryId, setEntryId] = useState(routeEntryId || null);
+  const [entryDiaryType, setEntryDiaryType] = useState(requestedDiaryType);
   const [entryRole, setEntryRole] = useState("owner");
   const [entryTitle, setEntryTitle] = useState(FALLBACK_ENTRY_TITLE);
   const [entryLoading, setEntryLoading] = useState(true);
@@ -678,12 +749,14 @@ export default function FlipBook({
       owner,
       collaborators: [],
       invites: [],
+      unmetFriendships: [],
     };
   });
   const [inviteName, setInviteName] = useState("");
   const [inviteOpen, setInviteOpen] = useState(false);
   const inviteMenuRef = useRef(null);
   const [inviteError, setInviteError] = useState("");
+  const [inviteMessage, setInviteMessage] = useState("");
   const [fontFamily, setFontFamily] = useState(
     () => localStorage.getItem("tool-font") || DEFAULT_FONT
   );
@@ -713,11 +786,17 @@ export default function FlipBook({
   const [showFontDropdown, setShowFontDropdown] = useState(false);
   const fontMenuRef = useRef(null);
   const currentUserId = sessionUser?.id || currentUser?.id || currentUser?.username || "local";
+  const storageUserId = sessionUser?.id || currentUser?.id || null;
   const currentUserName =
     sessionUser?.name || sessionUser?.username || currentUser?.name || currentUser?.username || "You";
-  const canEditEntry = entryRole === "owner" || entryRole === "editor";
   const isOwner = entryRole === "owner";
-  const canUseCollaborationUi = Boolean(routeEntryId) || collaborationEnabled;
+  const friendshipBlockers = Array.isArray(collabState.unmetFriendships)
+    ? collabState.unmetFriendships
+    : [];
+  const hasFriendshipBlockers =
+    entryDiaryType === DIARY_TYPE_COLLABORATIVE && !isOwner && friendshipBlockers.length > 0;
+  const canEditEntry = (entryRole === "owner" || entryRole === "editor") && !hasFriendshipBlockers;
+  const canUseCollaborationUi = entryDiaryType === DIARY_TYPE_COLLABORATIVE;
   const [remotePresence, setRemotePresence] = useState({});
   const presenceChannelRef = useRef(null);
   const presenceThrottleRef = useRef(null);
@@ -727,7 +806,10 @@ export default function FlipBook({
   const didPersistInitialPagesRef = useRef(false);
   const isHydratingFromBackendRef = useRef(false);
   const skipNextRemoteSaveRef = useRef(false);
+  const skipNextRealtimeEmitRef = useRef(false);
   const saveTimerRef = useRef(null);
+  const realtimeSocketRef = useRef(null);
+  const realtimeEmitTimerRef = useRef(null);
 
   const hydratePagesFromEntry = (entry) => {
     const parsedPages = parseEntryPages(entry?.content);
@@ -743,16 +825,38 @@ export default function FlipBook({
     }
   };
 
-  const refreshCollaborators = async (targetEntryId, ownerUsername) => {
+  const refreshCollaborators = async (targetEntryId, ownerUsername, options = {}) => {
     if (!targetEntryId) return;
     try {
       const collabData = await getCollaborators(targetEntryId);
-      const normalized = normalizeCollaboratorRows(collabData?.collaborators || [], ownerUsername);
+      const ownerFromApi = collabData?.owner?.username || ownerUsername;
+      const normalized = normalizeCollaboratorRows(collabData?.collaborators || [], ownerFromApi);
+      const unmetFriendships = Array.isArray(collabData?.unmet_friendships)
+        ? collabData.unmet_friendships
+        : [];
+      const activeRole = options.currentRole || entryRole;
+      const shouldWarn = activeRole !== "owner" && unmetFriendships.length > 0;
+
+      if (shouldWarn) {
+        const names = unmetFriendships
+          .map((item) => item?.username)
+          .filter(Boolean)
+          .join(", ");
+        setInviteMessage(
+          names
+            ? `You must be friends with ${names} before you can edit this collaborative diary.`
+            : "You must be friends with all collaborators before you can edit this diary."
+        );
+      } else if (!inviteError) {
+        setInviteMessage("");
+      }
+
       setCollabState({
         bookId: `book-${targetEntryId}`,
         owner: normalized.owner,
         collaborators: normalized.collaborators,
         invites: normalized.invites,
+        unmetFriendships,
       });
     } catch {
       // Keep existing collaboration UI state on backend errors.
@@ -769,23 +873,37 @@ export default function FlipBook({
     }
   };
 
-  const persistActiveEntryId = (nextEntryId) => {
+  const persistActiveEntryId = (nextEntryId, diaryType = requestedDiaryType) => {
     if (!nextEntryId) return null;
     const normalizedId = String(nextEntryId);
+    const normalizedDiaryType = normalizeDiaryType(diaryType, requestedDiaryType);
     setEntryId(normalizedId);
+    setEntryDiaryType(normalizedDiaryType);
     if (typeof window !== "undefined") {
+      localStorage.setItem(getDiaryStorageKey(normalizedDiaryType, storageUserId), normalizedId);
       localStorage.setItem("activeDiaryEntryId", normalizedId);
     }
     return normalizedId;
   };
 
   const resolveInviteEntryId = async () => {
+    const collaborativeStorageKey = getDiaryStorageKey(DIARY_TYPE_COLLABORATIVE, storageUserId);
+    const storedCollaborativeId =
+      typeof window !== "undefined" ? localStorage.getItem(collaborativeStorageKey) : null;
     const immediateId =
-      entryId ||
+      (entryDiaryType === DIARY_TYPE_COLLABORATIVE ? entryId : null) ||
       routeEntryId ||
-      (typeof window !== "undefined" ? localStorage.getItem("activeDiaryEntryId") : null);
+      storedCollaborativeId;
     if (immediateId) {
-      return persistActiveEntryId(immediateId);
+      try {
+        const entryResult = await getEntry(immediateId);
+        const immediateEntry = entryResult?.entry || null;
+        if (getEntryDiaryType(immediateEntry) === DIARY_TYPE_COLLABORATIVE) {
+          return persistActiveEntryId(immediateEntry.id, DIARY_TYPE_COLLABORATIVE);
+        }
+      } catch {
+        // Continue to collaborative fallback lookup below.
+      }
     }
 
     let entries = [];
@@ -796,30 +914,32 @@ export default function FlipBook({
       // Continue with createEntry fallback if entries listing is unavailable.
     }
     const meId = sessionUser?.id || currentUserId;
+    const collaborativeEntries = entries.filter(
+      (item) => getEntryDiaryType(item) === DIARY_TYPE_COLLABORATIVE
+    );
     const fallbackEntry =
-      entries.find((item) => String(item.owner_id || "") === String(meId || "")) ||
-      entries.find((item) => item.my_role == null) ||
-      entries.find((item) => item.my_role === "editor") ||
-      entries[0] ||
+      collaborativeEntries.find((item) => String(item.owner_id || "") === String(meId || "")) ||
+      collaborativeEntries[0] ||
       null;
 
     if (fallbackEntry?.id) {
       setEntryTitle(fallbackEntry.title || FALLBACK_ENTRY_TITLE);
       setEntryRole(fallbackEntry.my_role || "owner");
-      return persistActiveEntryId(fallbackEntry.id);
+      return persistActiveEntryId(fallbackEntry.id, DIARY_TYPE_COLLABORATIVE);
     }
 
     const created = await createEntry({
       title: entryTitle || FALLBACK_ENTRY_TITLE,
-      content: pages,
-      isPrivate: true,
+      content: createDefaultPages(),
+      isPrivate: false,
+      diaryType: DIARY_TYPE_COLLABORATIVE,
     });
     const createdEntry = created?.entry || null;
     if (!createdEntry?.id) return null;
 
     setEntryTitle(createdEntry.title || FALLBACK_ENTRY_TITLE);
     setEntryRole("owner");
-    return persistActiveEntryId(createdEntry.id);
+    return persistActiveEntryId(createdEntry.id, DIARY_TYPE_COLLABORATIVE);
   };
 
   useEffect(() => {
@@ -933,6 +1053,17 @@ export default function FlipBook({
   }, [selectedBlock]);
 
   useEffect(() => {
+    isHydratingFromBackendRef.current = true;
+    skipNextRemoteSaveRef.current = true;
+    setPages(loadPages(requestedDiaryType, storageUserId));
+    setCurrent(0);
+    setActive({ index: 0, side: "front" });
+    queueMicrotask(() => {
+      isHydratingFromBackendRef.current = false;
+    });
+  }, [requestedDiaryType, storageUserId]);
+
+  useEffect(() => {
     if (!stickerOpen) return;
     const handlePointerDown = (event) => {
       if (!stickerMenuRef.current) return;
@@ -962,6 +1093,8 @@ export default function FlipBook({
     const loadEntryContext = async () => {
       setEntryLoading(true);
       setEntryError("");
+      setEntryDiaryType(requestedDiaryType);
+      setCollabState((prev) => ({ ...prev, unmetFriendships: [] }));
 
       try {
         const [profileResult, friendsResult, collaborationInvitesResult] = await Promise.all([
@@ -994,15 +1127,23 @@ export default function FlipBook({
         setIncomingInvites(incoming);
 
         const meId = me?.id || currentUserId;
+        const storageKey = getDiaryStorageKey(requestedDiaryType, meId);
         const storedEntryId =
-          typeof window !== "undefined" ? localStorage.getItem("activeDiaryEntryId") : null;
-        const candidateEntryId = routeEntryId || storedEntryId || entryId;
+          typeof window !== "undefined" ? localStorage.getItem(storageKey) : null;
+        const candidateEntryId = routeEntryId || storedEntryId;
 
         let entry = null;
         if (candidateEntryId) {
           try {
             const entryResult = await getEntry(candidateEntryId);
             entry = entryResult?.entry || null;
+            if (
+              entry &&
+              !routeEntryId &&
+              !matchesDiaryType(entry, requestedDiaryType)
+            ) {
+              entry = null;
+            }
           } catch (error) {
             // Route-bound ids should still surface their real error.
             if (routeEntryId) {
@@ -1010,7 +1151,7 @@ export default function FlipBook({
             }
             // Recover from stale/inaccessible remembered entry id.
             if (typeof window !== "undefined") {
-              localStorage.removeItem("activeDiaryEntryId");
+              localStorage.removeItem(storageKey);
             }
           }
         }
@@ -1019,10 +1160,12 @@ export default function FlipBook({
           try {
             const entriesResult = await getEntries();
             const entries = Array.isArray(entriesResult?.entries) ? entriesResult.entries : [];
+            const matchingEntries = entries.filter(
+              (item) => matchesDiaryType(item, requestedDiaryType)
+            );
             entry =
-              entries.find((item) => String(item.owner_id || "") === String(meId || "")) ||
-              entries.find((item) => item.my_role === "editor") ||
-              entries[0] ||
+              matchingEntries.find((item) => String(item.owner_id || "") === String(meId || "")) ||
+              matchingEntries[0] ||
               null;
           } catch {
             // If listing fails, continue with entry creation fallback.
@@ -1031,8 +1174,9 @@ export default function FlipBook({
           if (!entry) {
             const created = await createEntry({
               title: FALLBACK_ENTRY_TITLE,
-              content: pages,
-              isPrivate: true,
+              content: createDefaultPages(),
+              isPrivate: requestedDiaryType === DIARY_TYPE_PRIVATE,
+              diaryType: requestedDiaryType,
             });
             entry = created?.entry || null;
           }
@@ -1044,24 +1188,51 @@ export default function FlipBook({
           throw new Error("Failed to load diary entry");
         }
 
-        const resolvedEntryId = String(entry.id);
-        setEntryId(resolvedEntryId);
+        const resolvedDiaryType = getEntryDiaryType(entry, requestedDiaryType);
+        const resolvedEntryId = persistActiveEntryId(entry.id, resolvedDiaryType);
         setEntryTitle(entry.title || FALLBACK_ENTRY_TITLE);
-        if (typeof window !== "undefined") {
-          localStorage.setItem("activeDiaryEntryId", resolvedEntryId);
-        }
         hydratePagesFromEntry(entry);
 
         // If my_role is null, this user is the entry owner.
         const role = entry.my_role || "owner";
         setEntryRole(role);
 
-        await refreshCollaborators(
-          resolvedEntryId,
-          entry.owner_username || me?.username || currentUser?.username || "Owner"
-        );
+        if (resolvedDiaryType === DIARY_TYPE_COLLABORATIVE) {
+          await refreshCollaborators(
+            resolvedEntryId,
+            entry.owner_username || me?.username || currentUser?.username || "Owner",
+            { currentRole: role }
+          );
+        } else {
+          setInviteMessage("");
+          const ownerUsername =
+            entry.owner_username ||
+            me?.username ||
+            currentUser?.username ||
+            collabState.owner?.username ||
+            "Owner";
+          setCollabState({
+            bookId: `book-${resolvedEntryId}`,
+            owner: {
+              username: ownerUsername,
+              role: "owner",
+              color: getColorForUser(ownerUsername),
+            },
+            collaborators: [],
+            invites: [],
+            unmetFriendships: [],
+          });
+        }
       } catch (error) {
         if (cancelled) return;
+        const deniedAccess =
+          error?.status === 403 ||
+          error?.status === 404 ||
+          /access denied/i.test(String(error?.message || ""));
+        if (routeEntryId && deniedAccess) {
+          navigate(COLLAB_HOME_ROUTE, { replace: true });
+          return;
+        }
         setEntryRole(currentUser?.role === "collaborator" ? "viewer" : "owner");
         setEntryError(error?.message || "Failed to load diary");
       } finally {
@@ -1076,7 +1247,7 @@ export default function FlipBook({
     return () => {
       cancelled = true;
     };
-  }, [routeEntryId]);
+  }, [routeEntryId, requestedDiaryType, navigate]);
 
   useEffect(() => {
     return () => {
@@ -1085,6 +1256,241 @@ export default function FlipBook({
       }
     };
   }, []);
+
+  useEffect(() => {
+    if (entryDiaryType !== DIARY_TYPE_COLLABORATIVE || !entryId) {
+      if (realtimeSocketRef.current) {
+        realtimeSocketRef.current.disconnect();
+        realtimeSocketRef.current = null;
+      }
+      return undefined;
+    }
+
+    const targetEntryId = String(entryId);
+    const socket = makeSocket();
+    realtimeSocketRef.current = socket;
+
+    const unwrapPayload = (rawPayload) => {
+      if (rawPayload && typeof rawPayload === "object" && rawPayload.payload) {
+        return rawPayload.payload;
+      }
+      return rawPayload || {};
+    };
+
+    const applyIncomingPages = (rawContent) => {
+      const parsedPages = parseEntryPages(rawContent);
+      if (!parsedPages || !parsedPages.length) return;
+      isHydratingFromBackendRef.current = true;
+      skipNextRemoteSaveRef.current = true;
+      skipNextRealtimeEmitRef.current = true;
+      setPages(parsedPages);
+      queueMicrotask(() => {
+        isHydratingFromBackendRef.current = false;
+      });
+    };
+
+    const handleConnect = () => {
+      socket.emit(COLLAB_WS_EVENTS.JOIN_ROOM, { entryId: targetEntryId });
+      socket.emit(COLLAB_WS_EVENTS.STATE_REQUEST, { entryId: targetEntryId });
+    };
+
+    const handleEntryEdit = (rawPayload = {}) => {
+      const payload = unwrapPayload(rawPayload);
+      const incomingEntryId = String(payload.entryId || payload.entry_id || "");
+      if (incomingEntryId !== targetEntryId) return;
+      applyIncomingPages(payload.content);
+    };
+
+    const handleRemoteCursorMove = (rawPayload = {}) => {
+      const payload = unwrapPayload(rawPayload);
+      const incomingEntryId = String(payload.entryId || payload.entry_id || "");
+      if (incomingEntryId && incomingEntryId !== targetEntryId) return;
+
+      const position = payload.position && typeof payload.position === "object" ? payload.position : {};
+      const textId = String(position.textId || position.id || "");
+      const remoteUserId = String(payload.userId || payload.user_id || position.userId || "");
+      if (!textId || !remoteUserId) return;
+
+      const remoteName = position.name || payload.name || remoteUserId;
+      const remoteColor = position.color || payload.color || getUserColor(remoteName);
+      const nextCursorIndex = Number.isFinite(position.cursorIndex)
+        ? position.cursorIndex
+        : Number.isFinite(position.selectionEnd)
+          ? position.selectionEnd
+          : Number.isFinite(position.selectionStart)
+            ? position.selectionStart
+            : 0;
+
+      setRemotePresence((prev) => {
+        const next = { ...prev };
+        const textMap = next[textId] ? { ...next[textId] } : {};
+        textMap[remoteUserId] = {
+          userId: remoteUserId,
+          name: remoteName,
+          color: remoteColor,
+          cursorIndex: nextCursorIndex,
+          selectionStart: Number.isFinite(position.selectionStart) ? position.selectionStart : nextCursorIndex,
+          selectionEnd: Number.isFinite(position.selectionEnd) ? position.selectionEnd : nextCursorIndex,
+          lastSeenTs: position.lastSeenTs || payload.timestamp || Date.now(),
+        };
+        next[textId] = textMap;
+        return next;
+      });
+    };
+
+    const handleRemoteCursorClear = (rawPayload = {}) => {
+      const payload = unwrapPayload(rawPayload);
+      const incomingEntryId = String(payload.entryId || payload.entry_id || "");
+      if (incomingEntryId && incomingEntryId !== targetEntryId) return;
+      const remoteUserId = String(payload.userId || payload.user_id || "");
+      if (!remoteUserId) return;
+
+      setRemotePresence((prev) => {
+        const next = {};
+        Object.entries(prev || {}).forEach(([textId, users]) => {
+          if (!users || typeof users !== "object") return;
+          const userMap = { ...users };
+          delete userMap[remoteUserId];
+          if (Object.keys(userMap).length > 0) {
+            next[textId] = userMap;
+          }
+        });
+        return next;
+      });
+    };
+
+    const handleStateResponse = (rawPayload = {}) => {
+      const payload = unwrapPayload(rawPayload);
+      const incomingEntryId = String(payload.entryId || payload.entry_id || "");
+      if (incomingEntryId && incomingEntryId !== targetEntryId) return;
+      applyIncomingPages(payload.content);
+    };
+
+    const handleAccessDenied = (rawPayload = {}) => {
+      const payload = unwrapPayload(rawPayload);
+      const incomingEntryId = String(payload.entryId || payload.entry_id || "");
+      if (incomingEntryId && incomingEntryId !== targetEntryId) return;
+      const missingFriends = Array.isArray(payload.missingFriends) ? payload.missingFriends : [];
+      if (missingFriends.length > 0) {
+        setCollabState((prev) => ({
+          ...prev,
+          unmetFriendships: missingFriends,
+        }));
+      }
+      setSaveError(payload.message || "Collaboration edit is blocked.");
+    };
+
+    const handleNotificationCreated = (rawPayload = {}) => {
+      const payload = unwrapPayload(rawPayload);
+      const notification = payload?.notification || payload;
+      const metadata = notification?.metadata || {};
+      const notificationEntryId = String(
+        metadata.entryId ||
+          metadata.entry_id ||
+          notification?.entity_id ||
+          notification?.entityId ||
+          ""
+      );
+      if (notificationEntryId !== targetEntryId) return;
+
+      if (notification?.type === "collaboration_removed") {
+        navigate(COLLAB_HOME_ROUTE, { replace: true });
+        return;
+      }
+
+      if (notification?.type === "collaboration_friendship_required") {
+        const missingFriends = Array.isArray(metadata?.missingFriends) ? metadata.missingFriends : [];
+        if (missingFriends.length > 0) {
+          setCollabState((prev) => ({
+            ...prev,
+            unmetFriendships: missingFriends,
+          }));
+        }
+        setSaveError(
+          notification?.message || "You must be friends with all collaborators to edit this entry."
+        );
+      }
+    };
+
+    socket.on("connect", handleConnect);
+    socket.on(COLLAB_WS_EVENTS.ENTRY_EDIT, handleEntryEdit);
+    socket.on(COLLAB_WS_EVENTS.ENTRY_CURSOR_MOVE, handleRemoteCursorMove);
+    socket.on(COLLAB_WS_EVENTS.ENTRY_CURSOR_CLEAR, handleRemoteCursorClear);
+    socket.on(COLLAB_WS_EVENTS.STATE_RESPONSE, handleStateResponse);
+    socket.on(COLLAB_WS_EVENTS.ACCESS_DENIED, handleAccessDenied);
+    socket.on(COLLAB_WS_EVENTS.NOTIFICATION_CREATED, handleNotificationCreated);
+
+    if (socket.connected) {
+      handleConnect();
+    }
+
+    return () => {
+      socket.off("connect", handleConnect);
+      socket.off(COLLAB_WS_EVENTS.ENTRY_EDIT, handleEntryEdit);
+      socket.off(COLLAB_WS_EVENTS.ENTRY_CURSOR_MOVE, handleRemoteCursorMove);
+      socket.off(COLLAB_WS_EVENTS.ENTRY_CURSOR_CLEAR, handleRemoteCursorClear);
+      socket.off(COLLAB_WS_EVENTS.STATE_RESPONSE, handleStateResponse);
+      socket.off(COLLAB_WS_EVENTS.ACCESS_DENIED, handleAccessDenied);
+      socket.off(COLLAB_WS_EVENTS.NOTIFICATION_CREATED, handleNotificationCreated);
+      if (socket.connected) {
+        socket.emit(COLLAB_WS_EVENTS.LEAVE_ROOM, { entryId: targetEntryId });
+      }
+      socket.disconnect();
+      if (realtimeSocketRef.current === socket) {
+        realtimeSocketRef.current = null;
+      }
+    };
+  }, [entryDiaryType, entryId, navigate]);
+
+  useEffect(() => {
+    if (entryDiaryType !== DIARY_TYPE_COLLABORATIVE || !entryId || !canEditEntry) return;
+    if (isHydratingFromBackendRef.current) return;
+    if (skipNextRealtimeEmitRef.current) {
+      skipNextRealtimeEmitRef.current = false;
+      return;
+    }
+
+    const socket = realtimeSocketRef.current;
+    if (!socket) return;
+
+    if (realtimeEmitTimerRef.current) {
+      clearTimeout(realtimeEmitTimerRef.current);
+    }
+
+    realtimeEmitTimerRef.current = setTimeout(() => {
+      if (!socket.connected) return;
+      socket.emit(COLLAB_WS_EVENTS.ENTRY_EDIT, {
+        entryId: String(entryId),
+        content: pages,
+        operation: "page_update",
+        timestamp: Date.now(),
+      });
+    }, 240);
+
+    return () => {
+      if (realtimeEmitTimerRef.current) {
+        clearTimeout(realtimeEmitTimerRef.current);
+      }
+    };
+  }, [pages, entryDiaryType, entryId, canEditEntry]);
+
+  useEffect(() => {
+    return () => {
+      if (realtimeEmitTimerRef.current) {
+        clearTimeout(realtimeEmitTimerRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (entryDiaryType !== DIARY_TYPE_COLLABORATIVE || !entryId) return undefined;
+    const interval = window.setInterval(() => {
+      refreshCollaborators(entryId, collabState.owner?.username || "Owner", {
+        currentRole: entryRole,
+      });
+    }, 12000);
+    return () => window.clearInterval(interval);
+  }, [entryDiaryType, entryId, collabState.owner?.username, entryRole]);
 
   useEffect(() => {
     if (typeof window === "undefined" || !("BroadcastChannel" in window)) {
@@ -1152,8 +1558,8 @@ export default function FlipBook({
       didPersistInitialPagesRef.current = true;
       return;
     }
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(pages));
-  }, [pages]);
+    localStorage.setItem(getPagesStorageKey(requestedDiaryType, storageUserId), JSON.stringify(pages));
+  }, [pages, requestedDiaryType, storageUserId]);
 
   useEffect(() => {
     if (!entryId || entryLoading || !canEditEntry) return;
@@ -1171,6 +1577,29 @@ export default function FlipBook({
         setSaveError("");
         await updateEntry(entryId, { content: pages });
       } catch (error) {
+        const isFriendshipBlocked = error?.data?.code === "COLLAB_FRIENDSHIP_REQUIRED";
+        if (isFriendshipBlocked) {
+          const missingFriends = Array.isArray(error?.data?.missingFriends)
+            ? error.data.missingFriends
+            : [];
+          if (missingFriends.length > 0) {
+            setCollabState((prev) => ({
+              ...prev,
+              unmetFriendships: missingFriends,
+            }));
+          }
+          setSaveError(error?.message || "You must be friends with all collaborators to edit this entry.");
+          return;
+        }
+
+        const deniedAccess =
+          error?.status === 403 ||
+          error?.status === 404 ||
+          /access denied/i.test(String(error?.message || ""));
+        if (deniedAccess && entryDiaryType === DIARY_TYPE_COLLABORATIVE) {
+          navigate(COLLAB_HOME_ROUTE, { replace: true });
+          return;
+        }
         setSaveError(error?.message || "Failed to save diary");
       }
     }, 650);
@@ -1180,7 +1609,30 @@ export default function FlipBook({
         clearTimeout(saveTimerRef.current);
       }
     };
-  }, [pages, entryId, entryLoading, canEditEntry]);
+  }, [pages, entryId, entryLoading, canEditEntry, entryDiaryType, navigate]);
+
+  useEffect(() => {
+    const normalizedFont = normalizeFontName(fontFamily);
+    if (!FONT_OPTIONS.includes(normalizedFont)) {
+      setFontFamily(DEFAULT_FONT);
+    }
+  }, [fontFamily]);
+
+  useEffect(() => {
+    const fontsToLoad = new Set([normalizeFontName(fontFamily)]);
+    pages.forEach((page) => {
+      ["frontBlocks", "backBlocks"].forEach((side) => {
+        const blocks = page?.[side];
+        if (!Array.isArray(blocks)) return;
+        blocks.forEach((block) => {
+          if (block?.type === "text") {
+            fontsToLoad.add(normalizeFontName(block.font));
+          }
+        });
+      });
+    });
+    fontsToLoad.forEach((fontName) => ensureFontIsLoaded(fontName));
+  }, [pages, fontFamily]);
 
   useEffect(() => {
     localStorage.setItem("tool-font", fontFamily);
@@ -1569,12 +2021,43 @@ export default function FlipBook({
     return page[key] || [];
   };
 
+  const normalizeSpeechText = (value = "") =>
+    String(value)
+      .replace(/\s+/g, " ")
+      .trim();
+
+  const mergeSpeechText = (...parts) =>
+    parts
+      .map((part) => normalizeSpeechText(part))
+      .filter(Boolean)
+      .join(" ");
+
+  const pickSpeechTranscript = (result) => {
+    if (!result || typeof result !== "object" || !Number.isFinite(result.length)) {
+      return "";
+    }
+    let bestTranscript = "";
+    let bestScore = -Infinity;
+    for (let i = 0; i < result.length; i += 1) {
+      const alternative = result[i];
+      const transcript = normalizeSpeechText(alternative?.transcript || "");
+      if (!transcript) continue;
+      const confidence = Number.isFinite(alternative?.confidence) ? alternative.confidence : 0;
+      const score = confidence + transcript.length / 10000;
+      if (score > bestScore) {
+        bestScore = score;
+        bestTranscript = transcript;
+      }
+    }
+    return bestTranscript;
+  };
+
   const setSpeechTargetFromBlock = (index, side, block) => {
     speechTargetRef.current = {
       index,
       side,
       blockId: block.id,
-      baseText: block?.text || "",
+      baseText: normalizeSpeechText(block?.text || ""),
       interimText: "",
     };
     return speechTargetRef.current;
@@ -1583,7 +2066,7 @@ export default function FlipBook({
   const commitSpeechInterim = () => {
     const target = speechTargetRef.current;
     if (!target || !target.interimText) return;
-    const committed = `${target.baseText} ${target.interimText}`.trim();
+    const committed = mergeSpeechText(target.baseText, target.interimText);
     target.baseText = committed;
     target.interimText = "";
     updateBlock(target.index, target.side, target.blockId, { text: committed });
@@ -1622,35 +2105,41 @@ export default function FlipBook({
     setSpeechTargetFromBlock(index, side, block);
 
     const rec = recognitionRef.current || new SpeechRecognition();
-    rec.lang = "en-US";
+    const browserLanguage =
+      (Array.isArray(window.navigator?.languages) && window.navigator.languages[0]) ||
+      window.navigator?.language ||
+      "en-US";
+    rec.lang = browserLanguage;
     rec.interimResults = true;
     rec.continuous = true;
-    rec.maxAlternatives = 1;
+    rec.maxAlternatives = 3;
 
     rec.onresult = (event) => {
       const target = speechTargetRef.current;
       if (!target) return;
-      let finalText = "";
-      let interimText = "";
+      const finalChunks = [];
+      const interimChunks = [];
       for (let i = event.resultIndex; i < event.results.length; i += 1) {
         const result = event.results[i];
+        const transcript = pickSpeechTranscript(result);
+        if (!transcript) continue;
         if (result.isFinal) {
-          finalText += result[0]?.transcript || "";
+          finalChunks.push(transcript);
         } else {
-          interimText += result[0]?.transcript || "";
+          interimChunks.push(transcript);
         }
       }
       if (!target) return;
       let nextBase = target.baseText;
-      const finalTrimmed = finalText.trim();
-      const interimTrimmed = interimText.trim();
+      const finalTrimmed = normalizeSpeechText(finalChunks.join(" "));
+      const interimTrimmed = normalizeSpeechText(interimChunks.join(" "));
       if (finalTrimmed) {
-        nextBase = `${nextBase} ${finalTrimmed}`.trim();
+        nextBase = mergeSpeechText(nextBase, finalTrimmed);
       }
       target.baseText = nextBase;
       target.interimText = interimTrimmed;
       updateBlock(target.index, target.side, target.blockId, {
-        text: `${nextBase} ${interimTrimmed}`.trim(),
+        text: mergeSpeechText(nextBase, interimTrimmed),
       });
     };
 
@@ -1731,6 +2220,7 @@ export default function FlipBook({
   };
 
   const handleFontFamilyChange = (value) => {
+    ensureFontIsLoaded(normalizeFontName(value));
     setFontFamily(value);
     const selected = selectedRef.current;
     if (!selected) return;
@@ -1767,8 +2257,36 @@ export default function FlipBook({
     ...collabState.collaborators.filter((collab) => collab.role !== "owner"),
   ];
   const collaboratorCount = collaboratorsSorted.length;
+  const nonFriendCollaborators = friendshipBlockers.filter(
+    (item, index, array) =>
+      item?.user_id &&
+      String(item.user_id) !== String(currentUserId) &&
+      array.findIndex((x) => String(x?.user_id) === String(item.user_id)) === index
+  );
+
+  const handleSendFriendRequestToCollaborator = async (person) => {
+    const username = person?.username;
+    const receiverId = person?.user_id;
+    if (!username && !receiverId) return;
+    setInviteBusy(true);
+    setInviteError("");
+    try {
+      await sendFriendRequest({ receiverId, username });
+      setInviteMessage(`Friend request sent to ${username || "user"}.`);
+      if (entryId) {
+        await refreshCollaborators(entryId, collabState.owner?.username || "Owner", {
+          currentRole: entryRole,
+        });
+      }
+    } catch (error) {
+      setInviteError(error?.message || "Failed to send friend request.");
+    } finally {
+      setInviteBusy(false);
+    }
+  };
 
   const handleInviteSubmit = async () => {
+    setInviteMessage("");
     if (!isOwner) {
       setInviteError("Only the diary owner can invite collaborators.");
       return;
@@ -1829,7 +2347,9 @@ export default function FlipBook({
 
       setInviteName("");
       setInviteError("");
-      await refreshCollaborators(targetEntryId, collabState.owner?.username || "Owner");
+      await refreshCollaborators(targetEntryId, collabState.owner?.username || "Owner", {
+        currentRole: entryRole,
+      });
     } catch (error) {
       setInviteError(error?.message || "Failed to send invitation.");
     } finally {
@@ -1839,9 +2359,12 @@ export default function FlipBook({
 
   const handleRemoveInvite = async (invite) => {
     if (!isOwner || !entryId || !invite?.collaboratorId) return;
+    setInviteMessage("");
     try {
       await removeCollaborator(entryId, invite.collaboratorId);
-      await refreshCollaborators(entryId, collabState.owner?.username || "Owner");
+      await refreshCollaborators(entryId, collabState.owner?.username || "Owner", {
+        currentRole: entryRole,
+      });
     } catch (error) {
       setInviteError(error?.message || "Failed to remove invite.");
     }
@@ -1851,14 +2374,17 @@ export default function FlipBook({
     if (!entryId || !collaborator?.id) return;
     const isSelfLeave = String(collaborator.id) === String(currentUserId);
     if (!isOwner && !isSelfLeave) return;
+    setInviteMessage("");
     try {
       await removeCollaborator(entryId, collaborator.id);
       if (isSelfLeave) {
         setInviteOpen(false);
-        navigate("/home");
+        navigate(COLLAB_HOME_ROUTE);
         return;
       }
-      await refreshCollaborators(entryId, collabState.owner?.username || "Owner");
+      await refreshCollaborators(entryId, collabState.owner?.username || "Owner", {
+        currentRole: entryRole,
+      });
     } catch (error) {
       setInviteError(
         error?.message || (isSelfLeave ? "Failed to leave collaboration." : "Failed to remove collaborator.")
@@ -1868,17 +2394,20 @@ export default function FlipBook({
 
   const handleAcceptIncomingInvite = async (invite) => {
     if (!invite?.id) return;
+    setInviteMessage("");
     setInviteBusy(true);
     try {
       await acceptCollaborationInvite(invite.id);
       await refreshIncomingInvites();
       const acceptedEntryId = invite.entry_id || invite.entryId;
       if (acceptedEntryId) {
-        navigate(`/edit/${acceptedEntryId}`);
+        navigate(`/edit/${acceptedEntryId}?mode=collab`);
         return;
       }
       if (entryId) {
-        await refreshCollaborators(entryId, collabState.owner?.username || "Owner");
+        await refreshCollaborators(entryId, collabState.owner?.username || "Owner", {
+          currentRole: entryRole,
+        });
       }
     } catch (error) {
       setInviteError(error?.message || "Failed to accept invitation.");
@@ -1889,6 +2418,7 @@ export default function FlipBook({
 
   const handleDeclineIncomingInvite = async (inviteId) => {
     if (!inviteId) return;
+    setInviteMessage("");
     setInviteBusy(true);
     try {
       await declineCollaborationInvite(inviteId);
@@ -1927,6 +2457,12 @@ export default function FlipBook({
     const id = textId || lastPresenceTextIdRef.current;
     if (!id) return;
     sendCollabEvent({ type: "presence", textId: id, isActive: false });
+    if (entryDiaryType === DIARY_TYPE_COLLABORATIVE && entryId) {
+      const socket = realtimeSocketRef.current;
+      if (socket?.connected) {
+        socket.emit(COLLAB_WS_EVENTS.ENTRY_CURSOR_CLEAR, { entryId: String(entryId) });
+      }
+    }
     lastPresenceTextIdRef.current = null;
   };
 
@@ -1944,6 +2480,25 @@ export default function FlipBook({
       isActive: true,
       lastSeenTs: Date.now(),
     });
+
+    if (entryDiaryType === DIARY_TYPE_COLLABORATIVE && entryId) {
+      const socket = realtimeSocketRef.current;
+      if (socket?.connected) {
+        socket.emit(COLLAB_WS_EVENTS.ENTRY_CURSOR_MOVE, {
+          entryId: String(entryId),
+          position: {
+            textId: id,
+            cursorIndex,
+            selectionStart,
+            selectionEnd,
+            name: currentUserName,
+            color: getUserColor(currentUserName),
+            lastSeenTs: Date.now(),
+          },
+          timestamp: Date.now(),
+        });
+      }
+    }
   };
 
   useEffect(() => {
@@ -1960,32 +2515,27 @@ export default function FlipBook({
 
   const renderToolbar = () => {
     const panelClass =
-      "flex items-center gap-2 bg-[#FFFAE8] px-3 py-2 rounded-[10px] border border-[#4A3C3A] shadow-[0_3px_0_rgba(197,193,176,0.6)]";
-    const panelLabel = "text-xs font-semibold text-[#4A3C3A]";
+      "flex items-center gap-1.5 sm:gap-2 bg-[#FFFAE8] px-2 sm:px-3 py-1.5 sm:py-2 rounded-[10px] border border-[#4A3C3A] shadow-[0_3px_0_rgba(197,193,176,0.6)]";
+    const panelLabel = "text-[10px] sm:text-xs font-semibold text-[#4A3C3A]";
     const smallButton =
-      "h-7 w-7 rounded-[8px] bg-gradient-to-b from-[#F4E4A8] to-[#E8D58F] text-[#402f2d] text-sm border border-[#c9b675] shadow-[0_2px_0_rgba(197,193,176,0.6)] transition-transform hover:scale-105";
+      "h-6 w-6 sm:h-7 sm:w-7 rounded-[8px] bg-gradient-to-b from-[#F4E4A8] to-[#E8D58F] text-[#402f2d] text-xs sm:text-sm border border-[#c9b675] shadow-[0_2px_0_rgba(197,193,176,0.6)] transition-transform hover:scale-105";
 
-    const normalizeFontName = (value) =>
-      String(value || "")
-        .split(",")[0]
-        .replace(/["']/g, "")
-        .trim();
     const currentFontName = normalizeFontName(fontFamily) || FONT_OPTIONS[0];
     const currentFont =
       FONT_OPTIONS.find((option) => option === currentFontName) || FONT_OPTIONS[0];
 
     return (
       <>
-        <div className="w-full rounded-[14px] bg-[#493B3A] border border-[#4A3C3A] px-6 py-3 flex items-center justify-between gap-4">
+        <div className="w-full rounded-[12px] sm:rounded-[14px] bg-[#493B3A] border border-[#4A3C3A] px-2 sm:px-4 md:px-6 py-2 sm:py-3 flex flex-wrap sm:flex-nowrap items-center justify-between gap-2 sm:gap-4">
           <img
             src="/assets/mainLogo.png"
             alt="Logo"
-            className="h-10 w-auto object-contain"
+            className="h-6 sm:h-8 md:h-10 w-auto object-contain"
           />
 
-          <div className="flex-1 flex justify-center">
+          <div className="order-3 sm:order-none basis-full sm:basis-auto flex-1 min-w-0 flex justify-center">
             {isTextSelected && (
-              <div className="flex flex-nowrap gap-2 items-center justify-center">
+              <div className="flex flex-wrap md:flex-nowrap gap-1.5 sm:gap-2 items-center justify-center">
                 <div className={panelClass}>
                   <span className={panelLabel}>Font</span>
                   <div className="font-dropdown" ref={fontMenuRef}>
@@ -2035,7 +2585,7 @@ export default function FlipBook({
                     onChange={(event) =>
                       handleFontSizeChange(parseInt(event.target.value || "0", 10))
                     }
-                    className="w-14 bg-[#FFFAE8] text-[#4A3C3A] text-sm rounded-[8px] px-2 py-1 text-center border border-[#4A3C3A] focus:outline-none focus:ring-2 focus:ring-[#F4E4A8] shadow-[inset_0_1px_0_rgba(255,255,255,0.8)]"
+                    className="w-12 sm:w-14 bg-[#FFFAE8] text-[#4A3C3A] text-xs sm:text-sm rounded-[8px] px-1.5 sm:px-2 py-1 text-center border border-[#4A3C3A] focus:outline-none focus:ring-2 focus:ring-[#F4E4A8] shadow-[inset_0_1px_0_rgba(255,255,255,0.8)]"
                   />
                   <button
                     className={smallButton}
@@ -2062,7 +2612,7 @@ export default function FlipBook({
               <button
                 type="button"
                 onClick={() => setInviteOpen(true)}
-                className="h-[46px] px-7 rounded-[8px] bg-gradient-to-b from-[#F4E4A8] to-[#E8D58F] text-[#402f2d] text-base font-semibold border border-[#c9b675] shadow-[0_2px_0_rgba(197,193,176,0.6)] transition-transform hover:scale-[1.03] active:translate-y-[1px]"
+                className="h-[34px] sm:h-[40px] md:h-[46px] px-3 sm:px-5 md:px-7 rounded-[8px] bg-gradient-to-b from-[#F4E4A8] to-[#E8D58F] text-[#402f2d] text-xs sm:text-sm md:text-base font-semibold border border-[#c9b675] shadow-[0_2px_0_rgba(197,193,176,0.6)] transition-transform hover:scale-[1.03] active:translate-y-[1px]"
               >
                 {isOwner ? "Invite" : "Collaborators"}
               </button>
@@ -2104,6 +2654,7 @@ export default function FlipBook({
                     onChange={(event) => {
                       setInviteName(event.target.value);
                       setInviteError("");
+                      setInviteMessage("");
                     }}
                     className="invite-input"
                     placeholder="Enter your friend’s username"
@@ -2119,6 +2670,7 @@ export default function FlipBook({
                 </div>
               )}
               {inviteError && <span className="invite-error">{inviteError}</span>}
+              {inviteMessage && <span className="invite-empty">{inviteMessage}</span>}
 
               <div className="invite-section">
                 <span className="invite-section-title">Incoming invites</span>
@@ -2228,6 +2780,38 @@ export default function FlipBook({
                   ))}
                 </ul>
               </div>
+
+              {nonFriendCollaborators.length > 0 && (
+                <div className="invite-section">
+                  <span className="invite-section-title">Friendship required to collaborate</span>
+                  <span className="invite-empty">
+                    You need to be friends with these collaborators before editing is enabled.
+                  </span>
+                  <ul className="invite-list">
+                    {nonFriendCollaborators.map((person) => (
+                      <li key={String(person.user_id)} className="invite-card">
+                        <span className="invite-avatar muted">
+                          {(person.username || "U").slice(0, 1).toUpperCase()}
+                        </span>
+                        <div className="invite-card-info">
+                          <span className="invite-username">{person.username || "Unknown user"}</span>
+                          <span className="invite-subtext">Not your friend yet</span>
+                        </div>
+                        <div className="invite-actions">
+                          <button
+                            type="button"
+                            className="invite-accept"
+                            onClick={() => handleSendFriendRequestToCollaborator(person)}
+                            disabled={inviteBusy}
+                          >
+                            Request friend
+                          </button>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
 
               <div className="invite-note-card">
                 Collaborators can view and edit content, but cannot use microphone or
@@ -2378,20 +2962,6 @@ export default function FlipBook({
 
   return (
     <div className="w-full max-w-6xl flex flex-col items-center gap-4">
-      <div className="w-full flex items-center justify-between px-1 text-sm text-[#4A3C3A]">
-        <span>{entryTitle}</span>
-        <span>
-          {entryLoading
-            ? "Loading..."
-            : saveError
-              ? saveError
-              : entryError
-                ? entryError
-                : canEditEntry
-                  ? "Autosave enabled"
-                  : "Read-only"}
-        </span>
-      </div>
       <div className="relative">
         <div className={`book ${isOpen ? "open" : ""} ${isFlipping ? "flipping" : ""}`}>
           {isOpen && current > 0 && !zoomMode && (

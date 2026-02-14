@@ -25,7 +25,6 @@ export default function Login({ navigate, setSession }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [rememberMe, setRememberMe] = useState(false);
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
   const [banner, setBanner] = useState(null);
@@ -74,7 +73,7 @@ export default function Login({ navigate, setSession }) {
           setBanner({ type: "error", text: "Two-factor session is invalid. Try again." });
           return;
         }
-        setSession({ tempToken, userId, remember: rememberMe });
+        setSession({ tempToken, userId, remember: true });
         navigate("verify-2fa");
       } else {
         const token =
@@ -83,7 +82,7 @@ export default function Login({ navigate, setSession }) {
           response.data?.accessToken ||
           null;
         if (token) {
-          setToken(token, { remember: rememberMe });
+          setToken(token, { remember: true });
         }
         setPassword("");
         setBanner({ type: "success", text: "Logged in successfully." });
@@ -150,18 +149,11 @@ export default function Login({ navigate, setSession }) {
             disabled: loading,
           }}
         />
-        <label className="auth-checkbox-row">
-          <input
-            type="checkbox"
-            checked={rememberMe}
-            onChange={(e) => setRememberMe(e.target.checked)}
-            disabled={loading}
-          />
-          <span>Remember me</span>
-        </label>
-        <AuthButton type="submit" disabled={loading} block>
-          {loading ? "Signing in..." : "Login"}
-        </AuthButton>
+        <div className="auth-submit-spacing">
+          <AuthButton type="submit" disabled={loading} block>
+            {loading ? "Signing in..." : "Login"}
+          </AuthButton>
+        </div>
       </form>
       <div className="auth-links">
         <span className="auth-link" onClick={() => navigate("forgot-password")}

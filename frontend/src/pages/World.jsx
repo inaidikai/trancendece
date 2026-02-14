@@ -3,7 +3,14 @@ import { Canvas, useFrame } from "@react-three/fiber";
 
 import { Physics, RigidBody, CapsuleCollider } from "@react-three/rapier";
 import { useNavigate } from "react-router-dom";
-import { Sky, Text, useGLTF, PointerLockControls } from "@react-three/drei";
+import {
+  Sky,
+  Text,
+  useGLTF,
+  PointerLockControls,
+  Environment,
+  useProgress,
+} from "@react-three/drei";
 import { CuboidCollider } from "@react-three/rapier";
 import { useRapier } from "@react-three/rapier";
 import { useAnimations } from "@react-three/drei";
@@ -11,7 +18,6 @@ import { useAnimations } from "@react-three/drei";
 import { Water } from "three-stdlib";
 import { useThree } from "@react-three/fiber";
 import * as THREE from "three";
-import { Environment } from "@react-three/drei";
 
 import DashboardPlaceholder from "../auth/pages/DashboardPlaceholder";
 import AuthButton from "../auth/components/AuthButton";
@@ -232,6 +238,78 @@ function WebGLFallback({ onOpenDiary, onTryAnyway, reason }) {
   );
 }
 
+function WorldLoadingStatusBridge({ onStatusChange }) {
+  const { active, progress } = useProgress();
+
+  useEffect(() => {
+    onStatusChange?.({
+      active: Boolean(active),
+      progress: Number.isFinite(progress) ? progress : 0,
+    });
+  }, [active, progress, onStatusChange]);
+
+  return null;
+}
+
+function WorldLoadingOverlay({ progress = 0 }) {
+  const safeProgress = Math.max(0, Math.min(100, Math.round(progress)));
+
+  return (
+    <div
+      style={{
+        position: "absolute",
+        inset: 0,
+        zIndex: 25,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        background:
+          "radial-gradient(circle at 20% 10%, rgba(74, 47, 42, 0.94) 0%, rgba(59, 42, 40, 0.96) 55%, rgba(35, 4, 1, 0.98) 100%)",
+        padding: 20,
+      }}
+    >
+      <div
+        style={{
+          width: "min(440px, 100%)",
+          borderRadius: 16,
+          border: "1px solid rgba(255, 250, 232, 0.28)",
+          background: "rgba(255, 250, 232, 0.08)",
+          boxShadow: "0 18px 38px rgba(0, 0, 0, 0.38)",
+          backdropFilter: "blur(6px)",
+          padding: "20px 20px 18px",
+          color: "#FFFAE8",
+        }}
+      >
+        <div style={{ fontSize: 24, fontWeight: 700, color: "#F4E4A8", marginBottom: 6 }}>
+          Loading World
+        </div>
+        <div style={{ fontSize: 14, opacity: 0.9, marginBottom: 14 }}>
+          Preparing your 3D space. This should take just a moment.
+        </div>
+        <div
+          style={{
+            height: 10,
+            borderRadius: 999,
+            background: "rgba(255, 255, 255, 0.18)",
+            overflow: "hidden",
+            border: "1px solid rgba(255, 255, 255, 0.22)",
+          }}
+        >
+          <div
+            style={{
+              width: `${safeProgress}%`,
+              height: "100%",
+              background: "linear-gradient(90deg, #F0D055 0%, #F4E4A8 100%)",
+              transition: "width 180ms ease",
+            }}
+          />
+        </div>
+        <div style={{ marginTop: 10, fontSize: 12, opacity: 0.85 }}>{safeProgress}%</div>
+      </div>
+    </div>
+  );
+}
+
 class WorldCanvasErrorBoundary extends React.Component {
   constructor(props) {
     super(props);
@@ -291,7 +369,7 @@ const AnimalModel = React.forwardRef(function AnimalModel({ state }, ref) {
 
 useGLTF.preload("/models/player.glb");
 
-function Player({ onTick, inputRef, consumeLook }) {
+function Player({ onTick, inputRef, consumeLook, onReady }) {
   const [animState, setAnimState] = useState("idle");
   const respawnRequested = useRef(true); // true = spawn once on first frame
   const BOUNDS = useMemo(() => ({ halfW: 13, halfD: 13 }), []);
@@ -360,6 +438,8 @@ const tmpDir = useMemo(() => new THREE.Vector3(), []);
 const didInitFacing = useRef(false);
 
   useFrame(({ camera }) => {
+    onReady?.();
+
     // spawn/respawn in-frame (camera yaw exists here)
     if (needsRespawn.current) {
       doRespawn(camera);
@@ -826,6 +906,9 @@ export default function World() {
   const [forceWebGLAttempt, setForceWebGLAttempt] = useState(false);
   const [canvasError, setCanvasError] = useState(null);
   const [canvasResetKey, setCanvasResetKey] = useState(0);
+  const [worldLoadState, setWorldLoadState] = useState({ active: true, progress: 0 });
+  const [sceneReady, setSceneReady] = useState(false);
+  const sceneReadyRef = useRef(false);
   const dashboardNavigate = useCallback(
     (target) => {
       if (target === "login") {
@@ -864,12 +947,40 @@ export default function World() {
 
   const shouldRenderWebGL = (webglStatus.available || forceWebGLAttempt) && !canvasError;
   const fallbackReason = canvasError?.message || webglStatus.reason;
+  const showWorldLoading =
+    shouldRenderWebGL &&
+    (!sceneReady || worldLoadState.active || Number(worldLoadState.progress || 0) < 100);
+
+  const handleWorldLoadingStatus = useCallback((status) => {
+    setWorldLoadState((prev) => {
+      const nextActive = Boolean(status?.active);
+      const rawProgress = Number(status?.progress);
+      const nextProgress = Number.isFinite(rawProgress) ? rawProgress : prev.progress;
+      if (prev.active === nextActive && Math.abs(prev.progress - nextProgress) < 0.1) {
+        return prev;
+      }
+      return { active: nextActive, progress: nextProgress };
+    });
+  }, []);
+
+  const markSceneReady = useCallback(() => {
+    if (sceneReadyRef.current) return;
+    sceneReadyRef.current = true;
+    setSceneReady(true);
+  }, []);
 
   const retryWebGLAttempt = useCallback(() => {
     setCanvasError(null);
     setForceWebGLAttempt(true);
     setCanvasResetKey((value) => value + 1);
   }, []);
+
+  useEffect(() => {
+    if (!shouldRenderWebGL) return;
+    sceneReadyRef.current = false;
+    setSceneReady(false);
+    setWorldLoadState({ active: true, progress: 0 });
+  }, [canvasResetKey, shouldRenderWebGL]);
   
   useEffect(() => {
     const minion = new Audio("/sfx/minion-speaking-made-with-Voicemod.mp3");
@@ -979,6 +1090,8 @@ export default function World() {
   const eWasDown = useRef(false);
 
   function tick(p, eDown) {
+    markSceneReady();
+
     const ePressed = eDown && !eWasDown.current;
     eWasDown.current = eDown;
 
@@ -1091,6 +1204,7 @@ export default function World() {
               }
               style={{ height: "100%", width: "100%", display: "block" }}
             >
+              <WorldLoadingStatusBridge onStatusChange={handleWorldLoadingStatus} />
               <Environment
                 files="/hdri/coffee_sky.hdr"
                 background
@@ -1121,7 +1235,12 @@ export default function World() {
                 </RigidBody>
 
                 {/* Player */}
-                <Player onTick={tick} inputRef={input} consumeLook={consumeLook} />
+                <Player
+                  onTick={tick}
+                  inputRef={input}
+                  consumeLook={consumeLook}
+                  onReady={markSceneReady}
+                />
               </Physics>
             </Canvas>
           </WorldCanvasErrorBoundary>
@@ -1131,6 +1250,9 @@ export default function World() {
             onTryAnyway={retryWebGLAttempt}
             reason={fallbackReason}
           />
+        )}
+        {showWorldLoading && (
+          <WorldLoadingOverlay progress={worldLoadState.progress} />
         )}
       </div>
 

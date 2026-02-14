@@ -3,7 +3,7 @@ const pool = require('../db/connection');
 class DashboardController {
   // Get dashboard summary
   static async getDashboard(req, res) {
-    const userId = req.user.userId;
+    const userId = req.user.userId || req.user.id;
 
     try {
       // Get counts in parallel
@@ -17,7 +17,7 @@ class DashboardController {
         // Unread notifications count
         pool.query(
           `SELECT COUNT(*) as count FROM notifications 
-           WHERE user_id = $1 AND is_read = FALSE AND is_archived = FALSE`,
+           WHERE recipient_id = $1 AND is_read = FALSE AND is_archived = FALSE`,
           [userId]
         ),
         

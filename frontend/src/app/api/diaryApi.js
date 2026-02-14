@@ -90,10 +90,16 @@ export function getEntries() {
   return diaryRequest("/api/entries");
 }
 
-export function createEntry({ title, content = [], coverImage = null, isPrivate = true }) {
+export function createEntry({
+  title,
+  content = [],
+  coverImage = null,
+  isPrivate = true,
+  diaryType,
+}) {
   return diaryRequest("/api/entries", {
     method: "POST",
-    body: { title, content, coverImage, isPrivate },
+    body: { title, content, coverImage, isPrivate, diaryType },
   });
 }
 
@@ -114,6 +120,13 @@ export function updateEntry(entryId, payload) {
 export function getFriends(status) {
   const url = status ? `/api/friends?status=${encodeURIComponent(status)}` : "/api/friends";
   return diaryRequest(url);
+}
+
+export function sendFriendRequest({ receiverId, username, message } = {}) {
+  return diaryRequest("/api/friends/request", {
+    method: "POST",
+    body: { receiverId, username, message },
+  });
 }
 
 export function searchUsers(query) {

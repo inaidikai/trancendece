@@ -13,10 +13,10 @@ async function setUserOnline(userId, socketId, io) {
     // Update or insert ws_connections record
     await pool.run(
       `
-      INSERT INTO ws_connections(user_id, socket_id, last_seen)
-      VALUES ($1, $2, NOW())
+      INSERT INTO ws_connections(user_id, socket_id, is_online, connected_at, last_seen)
+      VALUES ($1, $2, TRUE, NOW(), NOW())
       ON CONFLICT(user_id) DO UPDATE
-      SET socket_id = $2, last_seen = NOW()
+      SET socket_id = $2, is_online = TRUE, connected_at = NOW(), last_seen = NOW()
       `,
       [userId, socketId]
     );
@@ -59,7 +59,7 @@ async function setUserOffline(userId, io) {
     // Update connection status
     await pool.run(
       `UPDATE ws_connections 
-       SET socket_id = NULL, last_seen = NOW() 
+       SET socket_id = NULL, is_online = FALSE, last_seen = NOW() 
        WHERE user_id = $1`,
       [userId]
     );
@@ -104,10 +104,10 @@ async function getOnlineFriends(userId) {
       SELECT
         f.friend_id,
         w.socket_id,
-        (w.socket_id IS NOT NULL) AS online
+        (w.is_online = TRUE) AS online
       FROM friends f
       LEFT JOIN ws_connections w ON w.user_id = f.friend_id
-      WHERE f.user_id = $1 AND w.socket_id IS NOT NULL
+      WHERE f.user_id = $1 AND w.is_online = TRUE
       `,
       [userId]
     );

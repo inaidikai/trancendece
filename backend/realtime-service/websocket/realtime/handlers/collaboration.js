@@ -15,6 +15,7 @@ function handleCursorMove(io, socket, userId, entryId, position, cursorStore) {
   const entryCursors = cursorStore.get(entryId);
 
   const cursorPayload = {
+    entryId,
     userId,
     position,
     timestamp: Date.now(),
@@ -189,6 +190,93 @@ const lastEditMap = new Map(); // entryId -> { userId, timestamp }
 const debounceMap = new Map(); // socket.id -> timeout
 const cursorThrottleMap = new Map(); // socket.id -> lastEmit
 
+async function getEntryParticipantUserIds(entryId, excludeUserId = null) {
+  const rows = await pool.all(
+    `SELECT DISTINCT participants.participant_id AS user_id
+     FROM (
+       SELECT e.owner_id AS participant_id
+       FROM diary_entries e
+       WHERE e.id = $1
+       UNION
+       SELECT c.user_id AS participant_id
+       FROM collaborators c
+       WHERE c.entry_id = $1
+         AND c.status = 'accepted'
+     ) participants
+     WHERE ($2::text IS NULL OR participants.participant_id <> $2)`,
+    [entryId, excludeUserId ? String(excludeUserId) : null]
+  );
+
+  if (!Array.isArray(rows)) return [];
+  return rows
+    .map((row) => String(row?.user_id || ""))
+    .filter(Boolean);
+}
+
+async function canUserEditEntry(entryId, userId) {
+  const accessRows = await pool.all(
+    `SELECT 
+       e.owner_id,
+       (e.owner_id = $2) AS is_owner
+     FROM diary_entries e
+     WHERE e.id = $1
+       AND (
+         e.owner_id = $2
+         OR (
+           COALESCE(e.diary_type, CASE WHEN e.is_private THEN 'private' ELSE 'collaborative' END) = 'collaborative'
+           AND EXISTS (
+             SELECT 1
+             FROM collaborators c
+             WHERE c.entry_id = e.id
+               AND c.user_id = $2
+               AND c.status = 'accepted'
+               AND c.role = 'editor'
+           )
+         )
+       )
+     LIMIT 1`,
+    [entryId, userId]
+  );
+
+  if (!Array.isArray(accessRows) || accessRows.length === 0) {
+    return { allowed: false, missingFriends: [] };
+  }
+
+  const isOwner = Boolean(accessRows[0].is_owner);
+  if (isOwner) {
+    return { allowed: true, missingFriends: [] };
+  }
+
+  const friendshipRows = await pool.all(
+    `SELECT u.id AS user_id, u.username
+     FROM (
+       SELECT e.owner_id AS participant_id
+       FROM diary_entries e
+       WHERE e.id = $1
+       UNION
+       SELECT c.user_id AS participant_id
+       FROM collaborators c
+       WHERE c.entry_id = $1
+         AND c.status = 'accepted'
+     ) participants
+     JOIN users u ON u.id = participants.participant_id
+     WHERE participants.participant_id <> $2
+       AND NOT EXISTS (
+         SELECT 1
+         FROM friends f
+         WHERE (f.user_id = $2 AND f.friend_id = participants.participant_id)
+            OR (f.user_id = participants.participant_id AND f.friend_id = $2)
+       )`,
+    [entryId, userId]
+  );
+
+  if (Array.isArray(friendshipRows) && friendshipRows.length > 0) {
+    return { allowed: false, missingFriends: friendshipRows };
+  }
+
+  return { allowed: true, missingFriends: [] };
+}
+
 function registerCollaborationHandlers(io, socket, cursorStore, checkRateLimit) {
   const userId = socket.data.userId;
 
@@ -236,7 +324,23 @@ function registerCollaborationHandlers(io, socket, cursorStore, checkRateLimit) 
     // Debounce (500ms)
     debounceMap.set(
       socket.id,
-      setTimeout(() => {
+      setTimeout(async () => {
+        const access = await canUserEditEntry(entryId, userId).catch((error) => {
+          console.error(`[${new Date().toISOString()}] entry_edit access check error:`, error);
+          return { allowed: false, missingFriends: [] };
+        });
+
+        if (!access.allowed) {
+          socket.emit(DIARY_COLLAB_WS_EVENTS.ACCESS_DENIED, {
+            entryId,
+            message: "You must be friends with all collaborators to edit this entry.",
+            missingFriends: access.missingFriends || [],
+            timestamp: Date.now(),
+          });
+          debounceMap.delete(socket.id);
+          return;
+        }
+
         const editPayload = {
           entryId,
           content,
@@ -246,8 +350,24 @@ function registerCollaborationHandlers(io, socket, cursorStore, checkRateLimit) 
           timestamp: Date.now(),
         };
 
-        // Broadcast to others in the room
-        socket.to(room).emit(DIARY_COLLAB_WS_EVENTS.ENTRY_EDIT, editPayload);
+        // Primary realtime delivery path: emit to participant user rooms.
+        // This avoids missing updates when an entry room join is delayed/missed.
+        const recipientUserIds = await getEntryParticipantUserIds(entryId, userId).catch((error) => {
+          console.error(
+            `[${new Date().toISOString()}] entry_edit recipient resolution error:`,
+            error
+          );
+          return [];
+        });
+
+        if (recipientUserIds.length > 0) {
+          recipientUserIds.forEach((recipientId) => {
+            io.to(`user_${recipientId}`).emit(DIARY_COLLAB_WS_EVENTS.ENTRY_EDIT, editPayload);
+          });
+        } else {
+          // Fallback for edge cases: if recipients cannot be resolved, keep room-based sync.
+          socket.to(room).emit(DIARY_COLLAB_WS_EVENTS.ENTRY_EDIT, editPayload);
+        }
 
         // Update last edit tracking
         lastEditMap.set(entryId, {

@@ -27,7 +27,7 @@ async function sendFriendsList(socket, userId) {
     // Fetch friends from database
     const rows = await pool.all(
       `
-      SELECT f.friend_id, COALESCE((w.socket_id IS NOT NULL), false) AS online
+      SELECT f.friend_id, COALESCE((w.is_online = TRUE), false) AS online
       FROM friends f
       LEFT JOIN ws_connections w ON w.user_id = f.friend_id
       WHERE f.user_id = $1

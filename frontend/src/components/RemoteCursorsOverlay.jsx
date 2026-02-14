@@ -82,16 +82,13 @@ export default function RemoteCursorsOverlay({
   textareaRef,
   wrapperRef,
   presenceMap,
-  currentUserId,
 }) {
   const [hoveredUserId, setHoveredUserId] = useState(null);
 
   const entries = useMemo(() => {
     if (!presenceMap) return [];
-    return Object.entries(presenceMap)
-      .filter(([userId]) => userId !== currentUserId)
-      .map(([userId, data]) => ({ userId, ...data }));
-  }, [presenceMap, currentUserId]);
+    return Object.entries(presenceMap).map(([userId, data]) => ({ userId, ...data }));
+  }, [presenceMap]);
 
   useEffect(() => {
     const textarea = textareaRef?.current;

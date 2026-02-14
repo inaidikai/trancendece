@@ -13,9 +13,35 @@ const ensureAuthSchema = async () => {
   await db.query(`
     ALTER TABLE users
       ADD COLUMN IF NOT EXISTS avatar_url TEXT,
+      ADD COLUMN IF NOT EXISTS google_id VARCHAR(255),
       ADD COLUMN IF NOT EXISTS is_2fa_enabled BOOLEAN NOT NULL DEFAULT FALSE,
       ADD COLUMN IF NOT EXISTS two_fa_code TEXT,
       ADD COLUMN IF NOT EXISTS two_fa_code_expires TIMESTAMP
+  `);
+
+  await db.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_users_google_id_unique
+    ON users (google_id)
+    WHERE google_id IS NOT NULL
+  `);
+
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS oauth_tokens (
+      id TEXT PRIMARY KEY DEFAULT md5(random()::text || clock_timestamp()::text),
+      user_id VARCHAR(255) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      provider VARCHAR(50) NOT NULL DEFAULT 'google',
+      access_token TEXT,
+      refresh_token TEXT,
+      expires_at TIMESTAMP,
+      created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
+      CONSTRAINT oauth_tokens_user_provider_unique UNIQUE (user_id, provider)
+    )
+  `);
+
+  await db.query(`
+    CREATE INDEX IF NOT EXISTS idx_oauth_tokens_user_provider
+    ON oauth_tokens (user_id, provider)
   `);
 
   await db.query(`

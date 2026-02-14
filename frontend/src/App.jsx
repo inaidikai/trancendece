@@ -9,6 +9,7 @@ import DiaryEditor from "./pages/DiaryEditor.jsx";
 import PrivacyPolicy from "./pages/PrivacyPolicy.jsx";
 import Terms from "./pages/Terms.jsx";
 import GoogleCallback from "./pages/GoogleCallback.jsx";
+import FriendRequestToastLayer from "./components/FriendRequestToastLayer.jsx";
 import { getToken } from "./auth/authApi";
 
 function RequireAuth({ children }) {
@@ -19,7 +20,9 @@ function RequireAuth({ children }) {
 export default function App() {
   return (
     <div style={{ height: "100vh" }}>
+      <FriendRequestToastLayer />
       <Routes>
+        <Route path="/" element={<Navigate to="/login" replace />} />
         <Route path="/login" element={<AuthRoutes initial="login" />} />
         <Route path="/signup" element={<AuthRoutes initial="signup" />} />
         <Route path="/forgot-password" element={<AuthRoutes initial="forgot-password" />} />
@@ -76,7 +79,7 @@ export default function App() {
           }
         />
 
-        <Route path="*" element={<Navigate to="/world" replace />} />
+        <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
     </div>
   );

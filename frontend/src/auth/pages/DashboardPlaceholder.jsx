@@ -6,6 +6,7 @@ import { makeSocket } from "../../socket";
 const defaultCurrentUser = {
   id: "",
   name: "User",
+  username: "",
   email: "",
   channelName: "",
   avatar: null,
@@ -14,11 +15,13 @@ const defaultCurrentUser = {
 const initialFriends = [];
 const initialNotifications = [];
 const API_BASE = (import.meta.env?.VITE_API_URL || "/api").replace(/\/$/, "");
+const FRIEND_REQUEST_TOAST_MS = 30000;
 
 const NOTIFICATION_EVENTS = {
   CREATED: "notification:created",
   MARK_READ: "notification:mark_read",
   MARK_ALL_READ: "notification:mark_all_read",
+  ARCHIVE: "notification:archive",
   READ_SUCCESS: "notification:read_success",
   LIST_REQUEST: "notification:list_request",
   LIST_RESPONSE: "notification:list_response",
@@ -93,6 +96,12 @@ const getCollaborationInviteId = (note) => {
   return inviteId ? String(inviteId) : "";
 };
 
+const getFriendRequestId = (note) => {
+  const metadata = normalizeMetadata(note?.metadata);
+  const requestId = metadata.requestId || metadata.request_id || note?.entityId || "";
+  return requestId ? String(requestId) : "";
+};
+
 const normalizeNotification = (note) => ({
   id: String(note?.id ?? `tmp-${Date.now()}`),
   title: note?.title || "Notification",
@@ -127,6 +136,15 @@ const normalizePending = (request) => ({
   direction: request?.direction || "sent",
 });
 
+const toToastRequest = (request) => ({
+  id: String(request?.id || `pending-${request?.requestId || ""}`),
+  requestId: String(request?.requestId || ""),
+  name: request?.name || request?.username || "A user",
+  username: request?.username || request?.name || "A user",
+  status: "pending",
+  direction: "received",
+});
+
 const parseSocketPayload = (payload) => {
   if (typeof payload === "string") {
     try {
@@ -144,12 +162,14 @@ const parseSocketPayload = (payload) => {
 
 async function diaryRequest(path, { method = "GET", body } = {}) {
   const token = getToken();
+  const headers = {
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
+  };
+
   const response = await fetch(`${API_BASE}/diary${path}`, {
     method,
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
+    headers,
     ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
   });
 
@@ -164,7 +184,7 @@ async function diaryRequest(path, { method = "GET", body } = {}) {
   }
 
   if (!response.ok) {
-    throw new Error(data?.error || data?.message || "Request failed");
+    throw new Error(data?.error || data?.message || `Request failed (${response.status})`);
   }
 
   return data;
@@ -332,11 +352,16 @@ function NotificationsPopover({
   isLoading,
   error,
   onRetry,
-  onMarkAllRead,
+  onClearAll,
+  isClearing,
   onAcceptInvite,
   onDeclineInvite,
   inviteActionBusyById,
   inviteActionResultById,
+  onAcceptFriendRequest,
+  onDeclineFriendRequest,
+  friendActionBusyById,
+  friendActionResultById,
   menuRef,
 }) {
   if (!isOpen) return null;
@@ -345,8 +370,12 @@ function NotificationsPopover({
     <div className="dashboard-popover" ref={menuRef}>
       <div className="dashboard-popover-header">
         <span>Notifications</span>
-        <button className="dashboard-link" onClick={onMarkAllRead}>
-          Mark all as read
+        <button
+          className="dashboard-link"
+          onClick={onClearAll}
+          disabled={isClearing || notifications.length === 0}
+        >
+          {isClearing ? "Clearing..." : "Clear all"}
         </button>
       </div>
       <div className="dashboard-popover-list">
@@ -360,7 +389,7 @@ function NotificationsPopover({
             </button>
           </div>
         ) : notifications.length === 0 ? (
-          <div className="dashboard-muted">No notifications</div>
+          <div className="dashboard-muted">No notifications left</div>
         ) : (
           notifications.map((note) => (
             (() => {
@@ -368,8 +397,27 @@ function NotificationsPopover({
               const isCollabInvite = note.type === "collaboration_invite";
               const inviteId = getCollaborationInviteId(note);
               const showInviteActions = isCollabInvite && Boolean(inviteId);
-              const isBusy = Boolean(inviteActionBusyById[noteId]);
-              const actionResult = inviteActionResultById[noteId] || "";
+              const isFriendRequest = note.type === "friend_request_received";
+              const requestId = getFriendRequestId(note);
+              const showFriendActions = isFriendRequest && Boolean(requestId);
+              const inviteBusy = Boolean(inviteActionBusyById[noteId]);
+              const friendBusy = Boolean(friendActionBusyById[noteId]);
+              const isBusy = inviteBusy || friendBusy;
+              const inviteActionResult = inviteActionResultById[noteId] || "";
+              const friendActionResult = friendActionResultById[noteId] || "";
+              const actionResult = inviteActionResult || friendActionResult;
+              const friendStatusText =
+                friendActionResult === "accepted"
+                  ? "Friend request accepted"
+                  : friendActionResult === "rejected"
+                    ? "Friend request rejected"
+                    : "";
+              const collaborationStatusText =
+                inviteActionResult === "accepted"
+                  ? "Collaboration invite accepted"
+                  : inviteActionResult === "declined"
+                    ? "Collaboration invite declined"
+                    : "";
 
               return (
                 <div
@@ -399,11 +447,27 @@ function NotificationsPopover({
                       </button>
                     </div>
                   )}
+                  {showFriendActions && !actionResult && (
+                    <div className="dashboard-popover-actions">
+                      <button
+                        className="dashboard-link"
+                        disabled={isBusy}
+                        onClick={() => onAcceptFriendRequest(note)}
+                      >
+                        {isBusy ? "Processing..." : "Accept"}
+                      </button>
+                      <button
+                        className="dashboard-link danger"
+                        disabled={isBusy}
+                        onClick={() => onDeclineFriendRequest(note)}
+                      >
+                        Decline
+                      </button>
+                    </div>
+                  )}
                   {actionResult && (
                     <div className="dashboard-popover-action-status">
-                      {actionResult === "accepted"
-                        ? "Collaboration invite accepted"
-                        : "Collaboration invite declined"}
+                      {friendStatusText || collaborationStatusText}
                     </div>
                   )}
                   <div className="dashboard-popover-time">
@@ -489,6 +553,7 @@ function CustomizeProfileModal({
   isOpen,
   onClose,
   onSave,
+  username,
   displayName,
   setDisplayName,
   bio,
@@ -541,6 +606,15 @@ function CustomizeProfileModal({
             />
           </div>
           <div className="auth-input-group">
+            <label className="auth-input-label">Username</label>
+            <input
+              className="auth-input readonly-input"
+              value={username || ""}
+              disabled
+              placeholder="Username"
+            />
+          </div>
+          <div className="auth-input-group">
             <label className="auth-input-label">Bio</label>
             <textarea
               className="auth-input auth-textarea"
@@ -568,13 +642,13 @@ function FriendRequestToast({ request, onAccept, onDecline }) {
   return (
     <div className="dashboard-toast">
       <div className="dashboard-toast-message">
-        {request.name} requested a friend request
+        {request.name} sent you a friend request
       </div>
       <div className="dashboard-toast-actions">
-        <button className="dashboard-link" onClick={onAccept}>
+        <button className="dashboard-link" onClick={() => onAccept(request)}>
           Accept
         </button>
-        <button className="dashboard-link danger" onClick={onDecline}>
+        <button className="dashboard-link danger" onClick={() => onDecline(request)}>
           Decline
         </button>
       </div>
@@ -590,6 +664,7 @@ export default function DashboardPlaceholder({ navigate }) {
   const [notifications, setNotifications] = useState(initialNotifications);
   const [notificationsError, setNotificationsError] = useState("");
   const [notificationsLoading, setNotificationsLoading] = useState(false);
+  const [notificationsClearing, setNotificationsClearing] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const [friendsOpen, setFriendsOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
@@ -608,11 +683,18 @@ export default function DashboardPlaceholder({ navigate }) {
   const [profileError, setProfileError] = useState("");
   const [inviteActionBusyById, setInviteActionBusyById] = useState({});
   const [inviteActionResultById, setInviteActionResultById] = useState({});
+  const [friendActionBusyById, setFriendActionBusyById] = useState({});
+  const [friendActionResultById, setFriendActionResultById] = useState({});
   const profileWrapperRef = useRef(null);
   const profileMenuRef = useRef(null);
   const notificationsWrapperRef = useRef(null);
   const notificationsPopoverRef = useRef(null);
   const socketRef = useRef(null);
+  const notificationListRequestSeqRef = useRef(0);
+  const latestNotificationListRequestRef = useRef(0);
+  const clearAllSyncTimerRef = useRef(null);
+  const clearedNotificationIdsRef = useRef(new Set());
+  const shownFriendToastIdsRef = useRef(new Set());
   const unreadFromList = useMemo(
     () => notifications.filter((note) => note.unread).length,
     [notifications]
@@ -625,6 +707,19 @@ export default function DashboardPlaceholder({ navigate }) {
     if (document.pointerLockElement) {
       document.exitPointerLock?.();
     }
+  }, []);
+
+  const requestNotificationsList = useCallback((socket, { showLoader = true } = {}) => {
+    if (!socket) return 0;
+    const requestId = (notificationListRequestSeqRef.current += 1);
+    latestNotificationListRequestRef.current = requestId;
+    setNotificationsError("");
+    if (showLoader) {
+      setNotificationsLoading(true);
+    }
+    socket.emit(NOTIFICATION_EVENTS.LIST_REQUEST, { limit: 50, offset: 0, requestId });
+    socket.emit(NOTIFICATION_EVENTS.COUNT_REQUEST);
+    return requestId;
   }, []);
 
   const markNotificationAsRead = useCallback((notificationId) => {
@@ -652,6 +747,7 @@ export default function DashboardPlaceholder({ navigate }) {
       setCurrentUser({
         id: String(user.id || ""),
         name: resolvedName,
+        username: user.username || "",
         email: user.email || "",
         channelName: resolvedName,
         avatar: toAvatarPreview(avatar),
@@ -693,6 +789,31 @@ export default function DashboardPlaceholder({ navigate }) {
         : [];
 
       setFriends([...pending, ...accepted]);
+      const receivedPending = pending.filter((request) => request.direction === "received");
+      setToastRequest((prev) => {
+        const previousRequestId = prev?.requestId ? String(prev.requestId) : "";
+        const previousStillPending =
+          previousRequestId &&
+          receivedPending.some((request) => String(request.requestId) === previousRequestId);
+
+        if (previousStillPending) {
+          return prev;
+        }
+
+        const unseenRequest = receivedPending.find(
+          (request) => !shownFriendToastIdsRef.current.has(String(request.requestId))
+        );
+
+        if (!unseenRequest) {
+          return null;
+        }
+
+        const toast = toToastRequest(unseenRequest);
+        if (toast.requestId) {
+          shownFriendToastIdsRef.current.add(toast.requestId);
+        }
+        return toast;
+      });
     } catch (error) {
       setFriendsError(error?.message || "Failed to load friends");
     } finally {
@@ -726,14 +847,24 @@ export default function DashboardPlaceholder({ navigate }) {
   }, [friendsOpen, loadFriendsData]);
 
   useEffect(() => {
+    const requestId = toastRequest?.requestId ? String(toastRequest.requestId) : "";
+    if (!requestId) return;
+
+    const timer = window.setTimeout(() => {
+      setToastRequest((current) =>
+        String(current?.requestId || "") === requestId ? null : current
+      );
+    }, FRIEND_REQUEST_TOAST_MS);
+
+    return () => window.clearTimeout(timer);
+  }, [toastRequest?.requestId]);
+
+  useEffect(() => {
     const socket = makeSocket();
     socketRef.current = socket;
 
     const loadNotifications = () => {
-      setNotificationsError("");
-      setNotificationsLoading(true);
-      socket.emit(NOTIFICATION_EVENTS.LIST_REQUEST, { limit: 50, offset: 0 });
-      socket.emit(NOTIFICATION_EVENTS.COUNT_REQUEST);
+      requestNotificationsList(socket, { showLoader: true });
     };
 
     const handleConnect = () => {
@@ -746,8 +877,20 @@ export default function DashboardPlaceholder({ navigate }) {
     };
 
     const handleListResponse = (payload = {}) => {
+      const responseRequestId = Number(payload.requestId || payload.request_id || 0);
+      if (
+        Number.isFinite(responseRequestId) &&
+        responseRequestId > 0 &&
+        responseRequestId < latestNotificationListRequestRef.current
+      ) {
+        return;
+      }
+
       const rows = Array.isArray(payload.notifications) ? payload.notifications : [];
-      setNotifications(rows.map(normalizeNotification));
+      const nextNotifications = rows
+        .map(normalizeNotification)
+        .filter((note) => !clearedNotificationIdsRef.current.has(String(note?.id || "")));
+      setNotifications(nextNotifications);
       setNotificationsLoading(false);
       setNotificationsError("");
     };
@@ -769,14 +912,17 @@ export default function DashboardPlaceholder({ navigate }) {
           item?.metadata?.senderUsername ||
           item.message.replace(/\s+sent you a friend request$/i, "") ||
           "A user";
-        setToastRequest({
-          id: `pending-${requestId}`,
-          requestId,
-          name: senderUsername,
-          username: senderUsername,
-          status: "pending",
-          direction: "received",
-        });
+        if (!shownFriendToastIdsRef.current.has(requestId)) {
+          shownFriendToastIdsRef.current.add(requestId);
+          setToastRequest(
+            toToastRequest({
+              id: `pending-${requestId}`,
+              requestId,
+              name: senderUsername,
+              username: senderUsername,
+            })
+          );
+        }
         loadFriendsData();
       }
     };
@@ -876,22 +1022,19 @@ export default function DashboardPlaceholder({ navigate }) {
       socket.disconnect();
       socketRef.current = null;
     };
-  }, []);
+  }, [requestNotificationsList]);
 
   useEffect(() => {
     if (!notificationsOpen) return;
     const socket = socketRef.current;
     if (!socket) return;
 
-    setNotificationsError("");
-    setNotificationsLoading(true);
-    socket.emit(NOTIFICATION_EVENTS.LIST_REQUEST, { limit: 50, offset: 0 });
-    socket.emit(NOTIFICATION_EVENTS.COUNT_REQUEST);
+    requestNotificationsList(socket, { showLoader: true });
 
     if (safeUnreadCount > 0) {
       socket.emit(NOTIFICATION_EVENTS.MARK_ALL_READ);
     }
-  }, [notificationsOpen, safeUnreadCount]);
+  }, [notificationsOpen, safeUnreadCount, requestNotificationsList]);
 
   useEffect(() => {
     if (!profileOpen) return;
@@ -926,6 +1069,15 @@ export default function DashboardPlaceholder({ navigate }) {
     releasePointerLockForUi,
   ]);
 
+  useEffect(() => {
+    return () => {
+      if (clearAllSyncTimerRef.current) {
+        clearTimeout(clearAllSyncTimerRef.current);
+        clearAllSyncTimerRef.current = null;
+      }
+    };
+  }, []);
+
   const handleInvite = async () => {
     const username = inviteUsername.trim();
     if (!username) {
@@ -950,9 +1102,12 @@ export default function DashboardPlaceholder({ navigate }) {
     try {
       if (friend.status === "pending" && friend.requestId) {
         if (friend.direction === "received") {
-          await diaryRequest(`/api/friends/decline/${friend.requestId}`, {
+          await diaryRequest(
+            `/api/friends/decline?requestId=${encodeURIComponent(friend.requestId)}`,
+            {
             method: "POST",
-          });
+            }
+          );
         } else {
           await diaryRequest(`/api/friends/request/${friend.requestId}/cancel`, {
             method: "POST",
@@ -969,12 +1124,16 @@ export default function DashboardPlaceholder({ navigate }) {
     }
   };
 
-  const handleAcceptRequest = async (request = toastRequest) => {
+  const handleAcceptRequest = async (requestInput) => {
+    const request = requestInput || toastRequest;
     if (!request?.requestId) return;
     try {
-      await diaryRequest(`/api/friends/accept/${request.requestId}`, {
+      await diaryRequest(
+        `/api/friends/accept?requestId=${encodeURIComponent(request.requestId)}`,
+        {
         method: "POST",
-      });
+        }
+      );
       if (toastRequest?.requestId === request.requestId) {
         setToastRequest(null);
       }
@@ -984,12 +1143,16 @@ export default function DashboardPlaceholder({ navigate }) {
     }
   };
 
-  const handleDeclineRequest = async (request = toastRequest) => {
+  const handleDeclineRequest = async (requestInput) => {
+    const request = requestInput || toastRequest;
     if (!request?.requestId) return;
     try {
-      await diaryRequest(`/api/friends/decline/${request.requestId}`, {
+      await diaryRequest(
+        `/api/friends/decline?requestId=${encodeURIComponent(request.requestId)}`,
+        {
         method: "POST",
-      });
+        }
+      );
       if (toastRequest?.requestId === request.requestId) {
         setToastRequest(null);
       }
@@ -1082,6 +1245,7 @@ export default function DashboardPlaceholder({ navigate }) {
       setCurrentUser((prev) => ({
         id: String(user.id || prev.id || ""),
         name: resolvedName,
+        username: user.username || prev.username || "",
         email: user.email || prev.email || "",
         channelName: resolvedName,
         avatar: toAvatarPreview(avatar),
@@ -1134,11 +1298,45 @@ export default function DashboardPlaceholder({ navigate }) {
     navigate("login");
   };
 
-  const handleMarkAllRead = () => {
-    const socket = socketRef.current;
-    if (!socket) return;
-    socket.emit(NOTIFICATION_EVENTS.MARK_ALL_READ);
-  };
+  const handleClearAllNotifications = useCallback(async () => {
+    if (notificationsClearing) return;
+    const notificationIds = notifications
+      .map((note) => String(note?.id || ""))
+      .filter(Boolean);
+    if (notificationIds.length === 0) return;
+
+    setNotificationsClearing(true);
+    setNotificationsError("");
+
+    try {
+      // Optimistic clear for immediate UX: show "No notifications" right away.
+      notificationIds.forEach((id) => clearedNotificationIdsRef.current.add(id));
+      setNotifications([]);
+      setUnreadCount(0);
+      setInviteActionBusyById({});
+      setInviteActionResultById({});
+      setFriendActionBusyById({});
+      setFriendActionResultById({});
+
+      const socket = socketRef.current;
+      if (socket) {
+        socket.emit(NOTIFICATION_EVENTS.ARCHIVE, { notificationIds });
+        socket.emit(NOTIFICATION_EVENTS.MARK_ALL_READ);
+        socket.emit(NOTIFICATION_EVENTS.COUNT_REQUEST);
+        if (clearAllSyncTimerRef.current) {
+          clearTimeout(clearAllSyncTimerRef.current);
+        }
+        clearAllSyncTimerRef.current = window.setTimeout(() => {
+          requestNotificationsList(socket, { showLoader: false });
+          clearAllSyncTimerRef.current = null;
+        }, 220);
+      }
+    } catch {
+      // Keep UI clear state; do not surface retry errors after a user clears all.
+    } finally {
+      setNotificationsClearing(false);
+    }
+  }, [notifications, notificationsClearing, requestNotificationsList]);
 
   const handleCollaborationInviteAction = useCallback(
     async (note, action) => {
@@ -1189,13 +1387,60 @@ export default function DashboardPlaceholder({ navigate }) {
     [handleCollaborationInviteAction]
   );
 
+  const handleFriendRequestAction = useCallback(
+    async (note, action) => {
+      const noteId = String(note?.id || "");
+      const requestId = getFriendRequestId(note);
+
+      if (!requestId) {
+        setNotificationsError("Friend request details are missing in this notification.");
+        return;
+      }
+
+      setNotificationsError("");
+      setFriendActionBusyById((prev) => ({ ...prev, [noteId]: true }));
+      try {
+        await diaryRequest(
+          `/api/friends/${action}?requestId=${encodeURIComponent(requestId)}`,
+          { method: "POST" }
+        );
+        setFriendActionResultById((prev) => ({
+          ...prev,
+          [noteId]: action === "accept" ? "accepted" : "rejected",
+        }));
+        markNotificationAsRead(noteId);
+        await loadFriendsData();
+      } catch (error) {
+        setNotificationsError(error?.message || `Failed to ${action} friend request`);
+      } finally {
+        setFriendActionBusyById((prev) => {
+          const next = { ...prev };
+          delete next[noteId];
+          return next;
+        });
+      }
+    },
+    [loadFriendsData, markNotificationAsRead]
+  );
+
+  const handleAcceptFriendFromNotification = useCallback(
+    async (note) => {
+      await handleFriendRequestAction(note, "accept");
+    },
+    [handleFriendRequestAction]
+  );
+
+  const handleDeclineFriendFromNotification = useCallback(
+    async (note) => {
+      await handleFriendRequestAction(note, "decline");
+    },
+    [handleFriendRequestAction]
+  );
+
   const handleReloadNotifications = () => {
     const socket = socketRef.current;
     if (!socket) return;
-    setNotificationsError("");
-    setNotificationsLoading(true);
-    socket.emit(NOTIFICATION_EVENTS.LIST_REQUEST, { limit: 50, offset: 0 });
-    socket.emit(NOTIFICATION_EVENTS.COUNT_REQUEST);
+    requestNotificationsList(socket, { showLoader: true });
   };
 
   const handleOpenTerms = () => {
@@ -1261,11 +1506,16 @@ export default function DashboardPlaceholder({ navigate }) {
               isLoading={notificationsLoading}
               error={notificationsError}
               onRetry={handleReloadNotifications}
-              onMarkAllRead={handleMarkAllRead}
+              onClearAll={handleClearAllNotifications}
+              isClearing={notificationsClearing}
               onAcceptInvite={handleAcceptFromNotification}
               onDeclineInvite={handleDeclineFromNotification}
               inviteActionBusyById={inviteActionBusyById}
               inviteActionResultById={inviteActionResultById}
+              onAcceptFriendRequest={handleAcceptFriendFromNotification}
+              onDeclineFriendRequest={handleDeclineFriendFromNotification}
+              friendActionBusyById={friendActionBusyById}
+              friendActionResultById={friendActionResultById}
               menuRef={notificationsPopoverRef}
             />
           </div>
@@ -1339,6 +1589,7 @@ export default function DashboardPlaceholder({ navigate }) {
           setProfileError("");
         }}
         onSave={handleSaveProfile}
+        username={currentUser.username}
         displayName={profileDisplayName}
         setDisplayName={setProfileDisplayName}
         bio={profileBio}

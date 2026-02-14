@@ -12,7 +12,9 @@ router.get('/requests', FriendsController.getPendingRequests);
 router.delete('/request/:requestId', FriendsController.cancelRequest);
 router.post('/request/:requestId/cancel', FriendsController.cancelRequest);
 router.post('/accept/:requestId', FriendsController.acceptRequest);
+router.post('/accept', FriendsController.acceptRequest);
 router.post('/decline/:requestId', FriendsController.declineRequest);
+router.post('/decline', FriendsController.declineRequest);
 router.delete('/:friendId', FriendsController.removeFriend);
 router.post('/remove/:friendId', FriendsController.removeFriend);
 
