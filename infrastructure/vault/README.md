@@ -8,6 +8,8 @@
 ## Files
 - `config.hcl`: Vault server config.
 - `bootstrap.vault.sh.gpg`: Encrypted script that does unseal + write secrets.
+- `bootstrap.vault.source.example.sh`: Safe template with placeholders (tracked in git).
+- `bootstrap.vault.source.sh`: Real local source with secrets (gitignored).
 - `run-bootstrap.sh`: Decrypts and runs `bootstrap.vault.sh.gpg`.
 - `encrypt-bootstrap.sh`: Re-encrypts after you update the source script.
 
@@ -21,9 +23,13 @@
    ```bash
    docker compose exec vault vault operator init -key-shares=3 -key-threshold=3
    ```
-3. Put the returned `Unseal Key 1..3` and `Initial Root Token` into `bootstrap.vault.source.sh`.
-4. Set `VAULT_BOOTSTRAP_GPG_PASSPHRASE` in `.env` to a strong passphrase.
-5. Encrypt script:
+3. Copy template and fill real values:
+   ```bash
+   cp infrastructure/vault/bootstrap.vault.source.example.sh infrastructure/vault/bootstrap.vault.source.sh
+   ```
+4. Put the returned `Unseal Key 1..3` and `Initial Root Token` into `bootstrap.vault.source.sh`.
+5. Set `VAULT_BOOTSTRAP_GPG_PASSPHRASE` in `.env` to a strong passphrase.
+6. Encrypt script:
    ```bash
    ./infrastructure/vault/encrypt-bootstrap.sh
    ```
