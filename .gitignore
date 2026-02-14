@@ -10,3 +10,7 @@ infrastructure/certs/*.crt
 infrastructure/certs/*.srl
 .env
 .env.*
+
+# Vault bootstrap artifacts
+infrastructure/vault/bootstrap.vault.source.sh
+infrastructure/vault/*.tmp
