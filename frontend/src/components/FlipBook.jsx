@@ -515,8 +515,6 @@ const createId = () => {
   return `id-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 };
 
-const stripHtml = (value) => value.replace(/<[^>]*>/g, "");
-
 const createTextBlock = ({ x, y, font, color, text, fontSize, width, height }) => ({
   id: createId(),
   type: "text",
@@ -571,15 +569,23 @@ const createEmptyPage = () => ({
   backBlocks: [],
 });
 
+const createDefaultPages = (count = DEFAULT_PAGES) =>
+  Array.from({ length: count }, () => createEmptyPage());
+
 const normalizePages = (pages) =>
   pages.map((page) => ({
     frontBlocks: Array.isArray(page.frontBlocks) ? page.frontBlocks : [],
     backBlocks: Array.isArray(page.backBlocks) ? page.backBlocks : [],
   }));
 
-const loadPages = (diaryType = DIARY_TYPE_PRIVATE) => {
+const getStorageUserScope = (userId) => {
+  const normalized = String(userId || "").trim();
+  return normalized || "anonymous";
+};
+
+const loadPages = (diaryType = DIARY_TYPE_PRIVATE, userId = null) => {
   const normalizedDiaryType = normalizeDiaryType(diaryType, DIARY_TYPE_PRIVATE);
-  const storageKey = getPagesStorageKey(normalizedDiaryType);
+  const storageKey = getPagesStorageKey(normalizedDiaryType, userId);
   const stored = localStorage.getItem(storageKey);
   if (stored) {
     try {
@@ -592,57 +598,7 @@ const loadPages = (diaryType = DIARY_TYPE_PRIVATE) => {
     }
   }
 
-  // Backward compatibility for pre-split cache key (private book only).
-  if (normalizedDiaryType === DIARY_TYPE_PRIVATE) {
-    const legacyStored = localStorage.getItem("diary-pages-v1");
-    if (legacyStored) {
-      try {
-        const parsed = JSON.parse(legacyStored);
-        if (Array.isArray(parsed) && parsed.length) {
-          return normalizePages(parsed);
-        }
-      } catch {
-        // ignore
-      }
-    }
-  }
-
-  const legacyCount = parseInt(localStorage.getItem("page-count") || "", 10);
-  const count = Number.isFinite(legacyCount) && legacyCount > 0 ? legacyCount : DEFAULT_PAGES;
-
-  return Array.from({ length: count }, (_, index) => {
-    const frontText = localStorage.getItem(`page-${index}-front`) || "";
-    const backText = localStorage.getItem(`page-${index}-back`) || "";
-    const frontColor = localStorage.getItem(`page-${index}-front-color`) || DEFAULT_COLOR;
-    const backColor = localStorage.getItem(`page-${index}-back-color`) || DEFAULT_COLOR;
-    const frontFont = localStorage.getItem(`page-${index}-front-font`) || DEFAULT_FONT;
-    const backFont = localStorage.getItem(`page-${index}-back-font`) || DEFAULT_FONT;
-
-    return {
-      frontBlocks: frontText
-        ? [
-            createTextBlock({
-              x: 0,
-              y: 0,
-              text: stripHtml(frontText),
-              font: frontFont,
-              color: frontColor,
-            }),
-          ]
-        : [],
-      backBlocks: backText
-        ? [
-            createTextBlock({
-              x: 0,
-              y: 0,
-              text: stripHtml(backText),
-              font: backFont,
-              color: backColor,
-            }),
-          ]
-        : [],
-    };
-  });
+  return createDefaultPages();
 };
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
@@ -699,11 +655,11 @@ const matchesDiaryType = (entry, requestedDiaryType) => {
   return expectedType === DIARY_TYPE_PRIVATE;
 };
 
-const getDiaryStorageKey = (diaryType) =>
-  `${ACTIVE_DIARY_ENTRY_STORAGE_PREFIX}${normalizeDiaryType(diaryType)}`;
+const getDiaryStorageKey = (diaryType, userId = null) =>
+  `${ACTIVE_DIARY_ENTRY_STORAGE_PREFIX}${getStorageUserScope(userId)}:${normalizeDiaryType(diaryType)}`;
 
-const getPagesStorageKey = (diaryType) =>
-  `${STORAGE_KEY_PREFIX}${normalizeDiaryType(diaryType)}`;
+const getPagesStorageKey = (diaryType, userId) =>
+  `${STORAGE_KEY_PREFIX}${getStorageUserScope(userId)}:${normalizeDiaryType(diaryType)}`;
 
 const normalizeCollaboratorRows = (rows = [], fallbackOwner = "Owner") => {
   const ownerRow = rows.find((row) => row.role === "owner");
@@ -747,7 +703,7 @@ export default function FlipBook({
   const requestedDiaryType = collaborationEnabled
     ? DIARY_TYPE_COLLABORATIVE
     : DIARY_TYPE_PRIVATE;
-  const [pages, setPages] = useState(() => loadPages(requestedDiaryType));
+  const [pages, setPages] = useState(() => createDefaultPages());
   const [current, setCurrent] = useState(0);
   const [isOpen] = useState(true);
   const [active, setActive] = useState({ index: 0, side: "front" });
@@ -830,6 +786,7 @@ export default function FlipBook({
   const [showFontDropdown, setShowFontDropdown] = useState(false);
   const fontMenuRef = useRef(null);
   const currentUserId = sessionUser?.id || currentUser?.id || currentUser?.username || "local";
+  const storageUserId = sessionUser?.id || currentUser?.id || null;
   const currentUserName =
     sessionUser?.name || sessionUser?.username || currentUser?.name || currentUser?.username || "You";
   const isOwner = entryRole === "owner";
@@ -923,14 +880,14 @@ export default function FlipBook({
     setEntryId(normalizedId);
     setEntryDiaryType(normalizedDiaryType);
     if (typeof window !== "undefined") {
-      localStorage.setItem(getDiaryStorageKey(normalizedDiaryType), normalizedId);
+      localStorage.setItem(getDiaryStorageKey(normalizedDiaryType, storageUserId), normalizedId);
       localStorage.setItem("activeDiaryEntryId", normalizedId);
     }
     return normalizedId;
   };
 
   const resolveInviteEntryId = async () => {
-    const collaborativeStorageKey = getDiaryStorageKey(DIARY_TYPE_COLLABORATIVE);
+    const collaborativeStorageKey = getDiaryStorageKey(DIARY_TYPE_COLLABORATIVE, storageUserId);
     const storedCollaborativeId =
       typeof window !== "undefined" ? localStorage.getItem(collaborativeStorageKey) : null;
     const immediateId =
@@ -973,7 +930,7 @@ export default function FlipBook({
 
     const created = await createEntry({
       title: entryTitle || FALLBACK_ENTRY_TITLE,
-      content: pages,
+      content: createDefaultPages(),
       isPrivate: false,
       diaryType: DIARY_TYPE_COLLABORATIVE,
     });
@@ -1098,13 +1055,13 @@ export default function FlipBook({
   useEffect(() => {
     isHydratingFromBackendRef.current = true;
     skipNextRemoteSaveRef.current = true;
-    setPages(loadPages(requestedDiaryType));
+    setPages(loadPages(requestedDiaryType, storageUserId));
     setCurrent(0);
     setActive({ index: 0, side: "front" });
     queueMicrotask(() => {
       isHydratingFromBackendRef.current = false;
     });
-  }, [requestedDiaryType]);
+  }, [requestedDiaryType, storageUserId]);
 
   useEffect(() => {
     if (!stickerOpen) return;
@@ -1170,7 +1127,7 @@ export default function FlipBook({
         setIncomingInvites(incoming);
 
         const meId = me?.id || currentUserId;
-        const storageKey = getDiaryStorageKey(requestedDiaryType);
+        const storageKey = getDiaryStorageKey(requestedDiaryType, meId);
         const storedEntryId =
           typeof window !== "undefined" ? localStorage.getItem(storageKey) : null;
         const candidateEntryId = routeEntryId || storedEntryId;
@@ -1217,7 +1174,7 @@ export default function FlipBook({
           if (!entry) {
             const created = await createEntry({
               title: FALLBACK_ENTRY_TITLE,
-              content: pages,
+              content: createDefaultPages(),
               isPrivate: requestedDiaryType === DIARY_TYPE_PRIVATE,
               diaryType: requestedDiaryType,
             });
@@ -1601,8 +1558,8 @@ export default function FlipBook({
       didPersistInitialPagesRef.current = true;
       return;
     }
-    localStorage.setItem(getPagesStorageKey(requestedDiaryType), JSON.stringify(pages));
-  }, [pages, requestedDiaryType]);
+    localStorage.setItem(getPagesStorageKey(requestedDiaryType, storageUserId), JSON.stringify(pages));
+  }, [pages, requestedDiaryType, storageUserId]);
 
   useEffect(() => {
     if (!entryId || entryLoading || !canEditEntry) return;
