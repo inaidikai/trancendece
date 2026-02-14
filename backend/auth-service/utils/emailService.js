@@ -28,7 +28,7 @@ const sendPasswordResetEmail = async (email, resetToken, userName) => {
         <p><a href="${resetLink}" style="background-color: #4CAF50; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">Reset Password</a></p>
         <p>This link expires in 1 hour.</p>
         <p>If you didn't request this, please ignore this email.</p>
-        <p>Best regards,<br/>Auth Team</p>
+        <p>Best regards,<br/>Quillow Team ^-^ </p>
       `,
     };
 
@@ -56,7 +56,7 @@ const sendVerificationEmail = async (email, verificationToken, userName) => {
         <p>Please verify your email address by clicking the link below:</p>
         <p><a href="${verificationLink}" style="background-color: #4CAF50; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">Verify Email</a></p>
         <p>This link expires in 24 hours.</p>
-        <p>Best regards,<br/>Auth Team</p>
+        <p>Best regards,<br/>Quillow Team  ^-^</p>
       `,
     };
 
@@ -80,7 +80,7 @@ const sendWelcomeEmail = async (email, userName) => {
         <h2>Welcome!</h2>
         <p>Hi ${userName || email},</p>
         <p>
-          <strong>Waddles</strong> is your personal diary platform — a safe space to write,
+          <strong>Quillow</strong> is your personal diary platform — a safe space to write,
           reflect, and express yourself while exploring a cozy <strong>3D world</strong> built
           just for you 🌍✨
         </p>
@@ -96,7 +96,7 @@ const sendWelcomeEmail = async (email, userName) => {
 
         <p>
           With love,<br/>
-          <strong>Team Waddles 🐧</strong>
+          <strong>Team Quillow Team  ^-^</strong>
         </p>
       `,
     };
@@ -136,7 +136,7 @@ const sendOAuthCodeEmail = async (email, code, userName) => {
         <h1 style="color: #4CAF50; font-size: 32px; letter-spacing: 5px;">${code}</h1>
         <p>This code expires in 10 minutes.</p>
         <p>If you didn't request this code, please ignore this email.</p>
-        <p>Best regards,<br/>Auth Team</p>
+        <p>Best regards,<br/>Quillow Team  ^-^</p>
       `,
     };
 
@@ -162,7 +162,7 @@ const sendTwoFAEmail = async (email, code, userName) => {
         <h1 style="color: #4CAF50; font-size: 40px; letter-spacing: 10px; font-weight: bold;">${code}</h1>
         <p style="font-size: 16px; color: #666;">This code expires in 10 minutes.</p>
         <p>If you didn't request this code, please ignore this email.</p>
-        <p>Best regards,<br/>Auth Team</p>
+        <p>Best regards,<br/>Quillow Team  ^-^</p>
       `,
     };
 

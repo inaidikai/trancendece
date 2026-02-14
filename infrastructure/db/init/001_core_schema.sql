@@ -1,6 +1,5 @@
 -- ============================================
--- WADDLES Complete Database Schema
--- Run this after 001_lola_schema.sql
+-- Main application tables
 -- ============================================
 
 -- ============================================
@@ -13,7 +12,11 @@ CREATE TABLE IF NOT EXISTS users (
   password_hash VARCHAR(255),
   full_name VARCHAR(100),
   avatar VARCHAR(500),
+  avatar_url TEXT,
   bio TEXT,
+  google_id VARCHAR(255) UNIQUE,
+  oauth_provider VARCHAR(50),
+  oauth_last_login TIMESTAMP,
   created_at TIMESTAMP DEFAULT NOW(),
   updated_at TIMESTAMP DEFAULT NOW(),
   last_seen TIMESTAMP DEFAULT NOW(),
@@ -22,6 +25,8 @@ CREATE TABLE IF NOT EXISTS users (
 
 CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
 CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
+CREATE INDEX IF NOT EXISTS idx_users_google_id ON users(google_id);
+CREATE INDEX IF NOT EXISTS idx_users_oauth_provider ON users(oauth_provider);
 CREATE INDEX IF NOT EXISTS idx_users_created_at ON users(created_at);
 
 -- ============================================
@@ -44,6 +49,36 @@ CREATE INDEX IF NOT EXISTS idx_friend_requests_sender ON friend_requests(sender_
 CREATE INDEX IF NOT EXISTS idx_friend_requests_status ON friend_requests(status);
 
 -- ============================================
+-- FRIENDS TABLE
+-- ============================================
+CREATE TABLE IF NOT EXISTS friends (
+  user_id TEXT NOT NULL,
+  friend_id TEXT NOT NULL,
+  created_at TIMESTAMP DEFAULT NOW(),
+  PRIMARY KEY (user_id, friend_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_friends_created_at ON friends(created_at);
+
+-- ============================================
+-- DIARY ENTRIES TABLE
+-- ============================================
+CREATE TABLE IF NOT EXISTS diary_entries (
+  id TEXT PRIMARY KEY,
+  owner_id VARCHAR(255),
+  title VARCHAR(255),
+  content TEXT NOT NULL DEFAULT '',
+  cover_image VARCHAR(500),
+  is_private BOOLEAN DEFAULT TRUE,
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_diary_entries_owner ON diary_entries(owner_id);
+CREATE INDEX IF NOT EXISTS idx_diary_entries_created_at ON diary_entries(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_diary_entries_is_private ON diary_entries(is_private);
+
+-- ============================================
 -- COLLABORATORS TABLE
 -- ============================================
 CREATE TABLE IF NOT EXISTS collaborators (
@@ -62,66 +97,6 @@ CREATE INDEX IF NOT EXISTS idx_collaborators_entry ON collaborators(entry_id);
 CREATE INDEX IF NOT EXISTS idx_collaborators_user ON collaborators(user_id, status);
 CREATE INDEX IF NOT EXISTS idx_collaborators_status ON collaborators(status);
 CREATE INDEX IF NOT EXISTS idx_collaborators_invited_by ON collaborators(invited_by);
-
--- ============================================
--- UPDATE diary_entries TO ADD MISSING COLUMNS
--- ============================================
-ALTER TABLE diary_entries 
-  ADD COLUMN IF NOT EXISTS owner_id VARCHAR(255),
-  ADD COLUMN IF NOT EXISTS title VARCHAR(255),
-  ADD COLUMN IF NOT EXISTS cover_image VARCHAR(500),
-  ADD COLUMN IF NOT EXISTS is_private BOOLEAN DEFAULT TRUE,
-  ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW();
-
-CREATE INDEX IF NOT EXISTS idx_diary_entries_owner ON diary_entries(owner_id);
-CREATE INDEX IF NOT EXISTS idx_diary_entries_created_at ON diary_entries(created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_diary_entries_is_private ON diary_entries(is_private);
-
--- ============================================
--- UPDATE ws_connections TO ADD MISSING COLUMNS
--- ============================================
-ALTER TABLE ws_connections
-  ADD COLUMN IF NOT EXISTS is_online BOOLEAN DEFAULT TRUE,
-  ADD COLUMN IF NOT EXISTS connected_at TIMESTAMP DEFAULT NOW();
-
--- Fix primary key if needed
-DO $$ 
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM information_schema.table_constraints 
-    WHERE table_name = 'ws_connections' AND constraint_type = 'PRIMARY KEY'
-  ) THEN
-    ALTER TABLE ws_connections ADD PRIMARY KEY (user_id);
-  END IF;
-END $$;
-
-CREATE INDEX IF NOT EXISTS idx_ws_connections_is_online ON ws_connections(is_online);
-CREATE INDEX IF NOT EXISTS idx_ws_connections_last_seen ON ws_connections(last_seen);
-
--- ============================================
--- UPDATE friends TABLE TO ADD TIMESTAMP
--- ============================================
-ALTER TABLE friends
-  ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW();
-
-CREATE INDEX IF NOT EXISTS idx_friends_created_at ON friends(created_at);
-
--- ============================================
--- ACTIVITY LOG TABLE
--- ============================================
-CREATE TABLE IF NOT EXISTS activity_log (
-  id SERIAL PRIMARY KEY,
-  user_id VARCHAR(255) NOT NULL,
-  action VARCHAR(100) NOT NULL,
-  entity_type VARCHAR(50),
-  entity_id VARCHAR(255),
-  metadata JSONB DEFAULT '{}',
-  created_at TIMESTAMP DEFAULT NOW()
-);
-
-CREATE INDEX IF NOT EXISTS idx_activity_log_user ON activity_log(user_id, created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_activity_log_entity ON activity_log(entity_type, entity_id);
-CREATE INDEX IF NOT EXISTS idx_activity_log_created_at ON activity_log(created_at DESC);
 
 -- ============================================
 -- NOTIFICATIONS TABLE
@@ -144,11 +119,50 @@ CREATE TABLE IF NOT EXISTS notifications (
   updated_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX IF NOT EXISTS idx_notifications_recipient_created
-  ON notifications (recipient_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_notifications_recipient_created ON notifications (recipient_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_notifications_unread ON notifications (recipient_id, is_read, is_archived);
 
-CREATE INDEX IF NOT EXISTS idx_notifications_unread
-  ON notifications (recipient_id, is_read, is_archived);
+-- ============================================
+-- WEBSOCKET CONNECTIONS TABLE
+-- ============================================
+CREATE TABLE IF NOT EXISTS ws_connections (
+  user_id TEXT PRIMARY KEY,
+  socket_id TEXT,
+  is_online BOOLEAN DEFAULT TRUE,
+  connected_at TIMESTAMP DEFAULT NOW(),
+  last_seen TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_ws_connections_is_online ON ws_connections(is_online);
+CREATE INDEX IF NOT EXISTS idx_ws_connections_last_seen ON ws_connections(last_seen);
+
+-- ============================================
+-- ACTIVE SESSIONS TABLE
+-- ============================================
+CREATE TABLE IF NOT EXISTS active_sessions (
+  entry_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'viewing',
+  last_seen TIMESTAMP NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (entry_id, user_id)
+);
+
+-- ============================================
+-- ACTIVITY LOG TABLE
+-- ============================================
+CREATE TABLE IF NOT EXISTS activity_log (
+  id SERIAL PRIMARY KEY,
+  user_id VARCHAR(255) NOT NULL,
+  action VARCHAR(100) NOT NULL,
+  entity_type VARCHAR(50),
+  entity_id VARCHAR(255),
+  metadata JSONB DEFAULT '{}',
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_activity_log_user ON activity_log(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_activity_log_entity ON activity_log(entity_type, entity_id);
+CREATE INDEX IF NOT EXISTS idx_activity_log_created_at ON activity_log(created_at DESC);
 
 -- ============================================
 -- Insert test users (for development)
@@ -185,35 +199,3 @@ ON CONFLICT (id) DO UPDATE SET
   owner_id = EXCLUDED.owner_id,
   title = EXCLUDED.title,
   content = EXCLUDED.content;
-
--- ============================================
--- Verification queries
--- ============================================
-
--- Count all tables
-SELECT 
-  'users' as table_name, COUNT(*) as count FROM users
-UNION ALL
-SELECT 'friends', COUNT(*) FROM friends
-UNION ALL
-SELECT 'friend_requests', COUNT(*) FROM friend_requests
-UNION ALL
-SELECT 'diary_entries', COUNT(*) FROM diary_entries
-UNION ALL
-SELECT 'collaborators', COUNT(*) FROM collaborators
-UNION ALL
-SELECT 'notifications', COUNT(*) FROM notifications
-UNION ALL
-SELECT 'ws_connections', COUNT(*) FROM ws_connections
-UNION ALL
-SELECT 'active_sessions', COUNT(*) FROM active_sessions
-ORDER BY table_name;
-
--- Show all table names
-SELECT table_name 
-FROM information_schema.tables 
-WHERE table_schema = 'public' 
-  AND table_type = 'BASE TABLE'
-ORDER BY table_name;
-
-SELECT '✅ Complete schema applied successfully!' as status;

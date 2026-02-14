@@ -4,6 +4,7 @@ const fastifyExpress = require("@fastify/express");
 const express = require("express");
 let db;
 let authRoutes;
+let userRoutes;
 const { loadVaultSecrets } = require("../shared/vault");
 
 fastify.get("/health", async () => ({ status: "Auth OK" }));
@@ -63,6 +64,7 @@ const start = async () => {
     await loadVaultSecrets({ logger: fastify.log });
     db = require("./config/database");
     authRoutes = require("./routes/authRoutes");
+    userRoutes = require("./routes/userRoutes");
 
     const PORT = Number(process.env.PORT || 8000);
     const DB_RETRY_ATTEMPTS = Number(process.env.DB_RETRY_ATTEMPTS || 30);
@@ -75,6 +77,7 @@ const start = async () => {
     await fastify.register(fastifyExpress);
     fastify.use(express.json());
     fastify.use(authRoutes);
+    fastify.use("/users", userRoutes);
     await waitForDatabaseReady(DB_RETRY_ATTEMPTS, DB_RETRY_DELAY_MS);
     await ensureAuthSchema();
 

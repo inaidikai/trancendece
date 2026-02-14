@@ -1,9 +1,16 @@
 const db = require('../config/database');
-const { generateId, hashPassword } = require('../utils/auth');
+const { generateId, hashPassword, validatePasswordPolicy } = require('../utils/auth');
 const { sendPasswordResetEmail } = require('../utils/emailService');
 
 const RESET_TOKEN_TTL_MS = Number(process.env.RESET_TOKEN_TTL_MS || 1000 * 60 * 60);
-const resetTokens = new Map();
+
+const storeResetToken = async (userId, token, expiresAt) => {
+  await db.run('DELETE FROM password_reset_tokens WHERE user_id = $1', [userId]);
+  await db.run(
+    'INSERT INTO password_reset_tokens (token, user_id, expires_at) VALUES ($1, $2, $3)',
+    [token, userId, new Date(expiresAt)]
+  );
+};
 
 const forgotPassword = async (req, res) => {
   const { email } = req.body || {};
@@ -24,7 +31,7 @@ const forgotPassword = async (req, res) => {
     }
 
     const token = generateId();
-    resetTokens.set(token, { userId: user.id, expiresAt: Date.now() + RESET_TOKEN_TTL_MS });
+    await storeResetToken(user.id, token, Date.now() + RESET_TOKEN_TTL_MS);
 
     const emailSent = await sendPasswordResetEmail(
       user.email,
@@ -55,13 +62,20 @@ const resetPassword = async (req, res) => {
   if (!token) {
     return res.status(400).json({ error: 'Token is required' });
   }
-  if (!password || String(password).length < 6) {
-    return res.status(400).json({ error: 'Password must be at least 6 characters' });
+  const policy = validatePasswordPolicy(password);
+  if (!policy.valid) {
+    return res.status(400).json({
+      error: 'Password policy failed',
+      details: policy.errors,
+    });
   }
 
-  const entry = resetTokens.get(token);
-  if (!entry || entry.expiresAt < Date.now()) {
-    resetTokens.delete(token);
+  const entry = await db.get(
+    'SELECT token, user_id, expires_at FROM password_reset_tokens WHERE token = $1',
+    [token]
+  );
+  if (!entry || new Date(entry.expires_at).getTime() < Date.now()) {
+    await db.run('DELETE FROM password_reset_tokens WHERE token = $1', [token]);
     return res.status(400).json({ error: 'Invalid or expired token' });
   }
 
@@ -69,9 +83,9 @@ const resetPassword = async (req, res) => {
     const hashedPassword = await hashPassword(password);
     await db.run(
       'UPDATE users SET password_hash = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
-      [hashedPassword, entry.userId]
+      [hashedPassword, entry.user_id]
     );
-    resetTokens.delete(token);
+    await db.run('DELETE FROM password_reset_tokens WHERE token = $1', [token]);
     return res.json({ message: 'Password reset successful' });
   } catch (err) {
     console.error('Reset password error:', err);

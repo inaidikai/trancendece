@@ -156,6 +156,13 @@ export function disable2FA({ password }) {
   );
 }
 
+export function regenerateRecoveryCodes() {
+  return requestWithFallback(
+    ["/auth/2fa/recovery-codes"],
+    { auth: true, body: {} }
+  );
+}
+
 export function logout() {
   return apiRequest("/auth/logout", { method: "POST", auth: true });
 }

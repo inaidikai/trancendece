@@ -108,18 +108,38 @@ const addFriend = (req, res) => {
       return res.status(404).json({ error: 'Friend not found' });
     }
 
-    const friendId = generateId();
-    const insertQuery = 'INSERT INTO friends (id, user_id, friend_id, status) VALUES ($1, $2, $3, $4)';
+    const existingFriendQuery = `
+      SELECT 1 FROM friends
+      WHERE (user_id = $1 AND friend_id = $2)
+         OR (user_id = $2 AND friend_id = $1)
+      LIMIT 1
+    `;
 
-    db.run(insertQuery, [friendId, userId, friend_id, 'pending'], function (err) {
+    db.get(existingFriendQuery, [userId, friend_id], (err, existing) => {
       if (err) {
-        if (err.message.includes('UNIQUE')) {
-          return res.status(409).json({ error: 'Friend request already exists' });
-        }
         return res.status(500).json({ error: 'Database error' });
       }
 
-      res.status(201).json({ message: 'Friend request sent', friend_id });
+      if (existing) {
+        return res.status(409).json({ error: 'Already friends' });
+      }
+
+      const requestId = generateId();
+      const insertQuery = `
+        INSERT INTO friend_requests (id, sender_id, receiver_id, status)
+        VALUES ($1, $2, $3, 'pending')
+      `;
+
+      db.run(insertQuery, [requestId, userId, friend_id], function (err) {
+        if (err) {
+          if (err.message.includes('UNIQUE')) {
+            return res.status(409).json({ error: 'Friend request already exists' });
+          }
+          return res.status(500).json({ error: 'Database error' });
+        }
+
+        res.status(201).json({ message: 'Friend request sent', friend_id });
+      });
     });
   });
 };
@@ -129,15 +149,51 @@ const getFriends = (req, res) => {
   const userId = req.user.userId;
   const { status = 'accepted' } = req.query;
 
+  if (status === 'pending') {
+    const pendingQuery = `
+      SELECT u.id, u.username, u.full_name, u.avatar_url, fr.status, fr.created_at
+      FROM friend_requests fr
+      JOIN users u ON (fr.sender_id = u.id)
+      WHERE fr.receiver_id = $1 AND fr.status = 'pending'
+      ORDER BY fr.created_at DESC
+    `;
+
+    return db.all(pendingQuery, [userId], (err, requests) => {
+      if (err) {
+        return res.status(500).json({ error: 'Database error' });
+      }
+
+      return res.json(requests);
+    });
+  }
+
+  if (status === 'sent') {
+    const sentQuery = `
+      SELECT u.id, u.username, u.full_name, u.avatar_url, fr.status, fr.created_at
+      FROM friend_requests fr
+      JOIN users u ON (fr.receiver_id = u.id)
+      WHERE fr.sender_id = $1 AND fr.status = 'pending'
+      ORDER BY fr.created_at DESC
+    `;
+
+    return db.all(sentQuery, [userId], (err, requests) => {
+      if (err) {
+        return res.status(500).json({ error: 'Database error' });
+      }
+
+      return res.json(requests);
+    });
+  }
+
   const query = `
-    SELECT u.id, u.username, u.full_name, u.avatar_url, f.status, f.created_at
+    SELECT u.id, u.username, u.full_name, u.avatar_url, f.created_at
     FROM friends f
     JOIN users u ON (f.friend_id = u.id)
-    WHERE f.user_id = $1 AND f.status = $2
+    WHERE f.user_id = $1
     ORDER BY f.created_at DESC
   `;
 
-  db.all(query, [userId, status], (err, friends) => {
+  db.all(query, [userId], (err, friends) => {
     if (err) {
       return res.status(500).json({ error: 'Database error' });
     }
@@ -151,22 +207,46 @@ const acceptFriend = (req, res) => {
   const userId = req.user.userId;
   const { friend_id } = req.body;
 
-  const updateQuery = `
-    UPDATE friends 
-    SET status = 'accepted', updated_at = CURRENT_TIMESTAMP
-    WHERE user_id = $1 AND friend_id = $2 AND status = 'pending'
+  const findRequestQuery = `
+    SELECT id
+    FROM friend_requests
+    WHERE sender_id = $1 AND receiver_id = $2 AND status = 'pending'
   `;
 
-  db.run(updateQuery, [friend_id, userId], function (err) {
+  db.get(findRequestQuery, [friend_id, userId], (err, requestRow) => {
     if (err) {
       return res.status(500).json({ error: 'Database error' });
     }
 
-    if (this.changes === 0) {
+    if (!requestRow) {
       return res.status(404).json({ error: 'Friend request not found' });
     }
 
-    res.json({ message: 'Friend request accepted' });
+    const acceptQuery = `
+      UPDATE friend_requests
+      SET status = 'accepted', updated_at = CURRENT_TIMESTAMP
+      WHERE id = $1
+    `;
+
+    db.run(acceptQuery, [requestRow.id], (acceptErr) => {
+      if (acceptErr) {
+        return res.status(500).json({ error: 'Database error' });
+      }
+
+      const insertFriendsQuery = `
+        INSERT INTO friends (user_id, friend_id)
+        VALUES ($1, $2), ($2, $1)
+        ON CONFLICT DO NOTHING
+      `;
+
+      db.run(insertFriendsQuery, [userId, friend_id], (insertErr) => {
+        if (insertErr) {
+          return res.status(500).json({ error: 'Database error' });
+        }
+
+        res.json({ message: 'Friend request accepted' });
+      });
+    });
   });
 };
 

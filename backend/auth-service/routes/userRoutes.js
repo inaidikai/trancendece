@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const multer = require('multer');
+const fs = require('fs');
 const path = require('path');
 const userController = require('../controllers/userController');
 const authMiddleware = require('../middleware/authMiddleware');
@@ -10,6 +11,11 @@ const { validate, schemas } = require('../middleware/validation');
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     const uploadDir = process.env.UPLOAD_DIR || './uploads/avatars';
+    try {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    } catch (err) {
+      return cb(err);
+    }
     cb(null, uploadDir);
   },
   filename: (req, file, cb) => {

@@ -1,8 +1,16 @@
 const db = require('../config/database');
-const { hashPassword, comparePassword, generateToken, generateId, verifyToken } = require('../utils/auth');
+const {
+  hashPassword,
+  comparePassword,
+  generateToken,
+  generateId,
+  verifyToken,
+  validatePasswordPolicy,
+} = require('../utils/auth');
 const { sendWelcomeEmail, sendTwoFAEmail } = require('../utils/emailService');
 
 const TWO_FA_CODE_EXPIRY_MS = 10 * 60 * 1000;
+const OAUTH_STATE_TTL_MS = Number(process.env.OAUTH_STATE_TTL_MS || 10 * 60 * 1000);
 
 const buildPending2FASubject = (userId) => `${userId}_2fa_pending`;
 
@@ -37,6 +45,23 @@ const issueAndSendTwoFACode = (user, callback) => {
   });
 };
 
+const consumeRecoveryCode = async (userId, code) => {
+  const entries = await db.all(
+    'SELECT id, code_hash FROM twofa_recovery_codes WHERE user_id = $1 AND used_at IS NULL',
+    [userId]
+  );
+
+  for (const entry of entries) {
+    const match = await comparePassword(code, entry.code_hash);
+    if (match) {
+      await db.run('UPDATE twofa_recovery_codes SET used_at = NOW() WHERE id = $1', [entry.id]);
+      return true;
+    }
+  }
+
+  return false;
+};
+
 // Register new user
 const register = (req, res) => {
   const { email, username, password, full_name } = req.body;
@@ -46,8 +71,12 @@ const register = (req, res) => {
     return res.status(400).json({ error: 'Email, username, and password are required' });
   }
 
-  if (password.length < 6) {
-    return res.status(400).json({ error: 'Password must be at least 6 characters' });
+  const policy = validatePasswordPolicy(password);
+  if (!policy.valid) {
+    return res.status(400).json({
+      error: 'Password policy failed',
+      details: policy.errors,
+    });
   }
 
   const userId = generateId();
@@ -167,18 +196,8 @@ const getMe = (req, res) => {
   });
 };
 
-// Logout (for session-based)
+// Logout (stateless JWT)
 const logout = (req, res) => {
-  const userId = req.user.userId;
-  const token = req.headers.authorization?.split(' ')[1];
-
-  if (token) {
-    const query = 'DELETE FROM sessions WHERE user_id = $1 AND token = $2';
-    db.run(query, [userId, token], (err) => {
-      if (err) console.error(err);
-    });
-  }
-
   res.json({ message: 'Logout successful' });
 };
 
@@ -215,9 +234,38 @@ const verify2FALogin = (req, res) => {
       return res.status(400).json({ error: '2FA code has expired. Please login again.' });
     }
 
-    // Verify code matches
+    // Verify code matches (email OTP or recovery code)
     if (String(code) !== String(user.two_fa_code)) {
-      return res.status(401).json({ error: 'Invalid 2FA code' });
+      consumeRecoveryCode(user_id, String(code))
+        .then((used) => {
+          if (!used) {
+            return res.status(401).json({ error: 'Invalid 2FA code' });
+          }
+
+          const clearQuery = 'UPDATE users SET two_fa_code = NULL, two_fa_code_expires = NULL WHERE id = $1';
+          db.run(clearQuery, [user_id], (clearErr) => {
+            if (clearErr) console.error('Error clearing 2FA code:', clearErr);
+          });
+
+          const token = generateToken(user_id);
+          return res.json({
+            message: 'Login successful',
+            user: {
+              id: user_id,
+              email: user.email,
+              username: user.username,
+              full_name: user.full_name,
+              avatar_url: user.avatar_url,
+            },
+            token,
+            recovery_used: true,
+          });
+        })
+        .catch((err) => {
+          console.error('Recovery code check failed:', err);
+          return res.status(500).json({ error: 'Error during 2FA verification' });
+        });
+      return;
     }
 
     // Clear the code after successful verification
@@ -353,23 +401,34 @@ const googleAuthInit = (req, res) => {
   // Generate state token for CSRF protection
   const crypto = require('crypto');
   const state = crypto.randomBytes(32).toString('hex');
-  
-  // Store state in session/cache (you can use Redis or memory cache)
-  // For now, we'll return it to frontend to send back
-  const googleAuthUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
-  googleAuthUrl.searchParams.append('client_id', clientId);
-  googleAuthUrl.searchParams.append('redirect_uri', redirectUri);
-  googleAuthUrl.searchParams.append('response_type', 'code');
-  googleAuthUrl.searchParams.append('scope', 'openid email profile');
-  googleAuthUrl.searchParams.append('state', state);
-  googleAuthUrl.searchParams.append('access_type', 'offline');
-  googleAuthUrl.searchParams.append('prompt', 'consent');
+  const expiresAt = new Date(Date.now() + OAUTH_STATE_TTL_MS);
 
-  res.json({
-    message: 'Google OAuth URL generated',
-    authUrl: googleAuthUrl.toString(),
-    state: state
-  });
+  // Persist state for validation on callback
+  db.run(
+    'INSERT INTO oauth_states (state, provider, expires_at) VALUES ($1, $2, $3)',
+    [state, 'google', expiresAt],
+    (err) => {
+      if (err) {
+        console.error('OAuth state insert error:', err.message || err);
+        return res.status(500).json({ error: 'Failed to start OAuth flow' });
+      }
+
+      const googleAuthUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
+      googleAuthUrl.searchParams.append('client_id', clientId);
+      googleAuthUrl.searchParams.append('redirect_uri', redirectUri);
+      googleAuthUrl.searchParams.append('response_type', 'code');
+      googleAuthUrl.searchParams.append('scope', 'openid email profile');
+      googleAuthUrl.searchParams.append('state', state);
+      googleAuthUrl.searchParams.append('access_type', 'offline');
+      googleAuthUrl.searchParams.append('prompt', 'consent');
+
+      return res.json({
+        message: 'Google OAuth URL generated',
+        authUrl: googleAuthUrl.toString(),
+        state: state
+      });
+    }
+  );
 };
 
 /**
@@ -392,6 +451,17 @@ const googleAuthCallback = async (req, res) => {
   }
 
   try {
+    const storedState = await db.get(
+      'SELECT state, expires_at FROM oauth_states WHERE state = $1 AND provider = $2',
+      [state, 'google']
+    );
+    if (!storedState || new Date(storedState.expires_at).getTime() < Date.now()) {
+      await db.run('DELETE FROM oauth_states WHERE state = $1', [state]);
+      return res.status(400).json({ error: 'Invalid or expired OAuth state' });
+    }
+
+    await db.run('DELETE FROM oauth_states WHERE state = $1', [state]);
+
     const axios = require('axios');
 
     // Step 1: Exchange authorization code for tokens

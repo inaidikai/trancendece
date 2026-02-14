@@ -1,6 +1,29 @@
 const db = require('../config/database');
-const { comparePassword } = require('../utils/auth');
+const { comparePassword, generateId, hashPassword } = require('../utils/auth');
+const crypto = require('crypto');
 const { sendTwoFAEmail } = require('../utils/emailService');
+
+const RECOVERY_CODE_COUNT = Number(process.env.RECOVERY_CODE_COUNT || 8);
+
+const generateRecoveryCodes = async (userId, count = RECOVERY_CODE_COUNT) => {
+  const codes = [];
+
+  await db.run('DELETE FROM twofa_recovery_codes WHERE user_id = $1', [userId]);
+
+  for (let i = 0; i < count; i += 1) {
+    const code = crypto.randomBytes(5).toString('hex');
+    const codeHash = await hashPassword(code);
+    const codeId = generateId();
+
+    await db.run(
+      'INSERT INTO twofa_recovery_codes (id, user_id, code_hash) VALUES ($1, $2, $3)',
+      [codeId, userId, codeHash]
+    );
+    codes.push(code);
+  }
+
+  return codes;
+};
 
 // Enable 2FA (Email-based)
 const enable2FA = async (req, res) => {
@@ -21,15 +44,26 @@ const enable2FA = async (req, res) => {
     // Enable 2FA flag
     const query = 'UPDATE users SET is_2fa_enabled = true WHERE id = $1';
 
-    db.run(query, [userId], (err) => {
+    db.run(query, [userId], async (err) => {
       if (err) {
         return res.status(500).json({ error: 'Database error' });
       }
 
-      res.json({
-        message: '2FA enabled successfully',
-        instructions: 'Next time you login, a 6-digit code will be sent to your email',
-      });
+      try {
+        const recoveryCodes = await generateRecoveryCodes(userId);
+        res.json({
+          message: '2FA enabled successfully',
+          instructions: 'Next time you login, a 6-digit code will be sent to your email',
+          recovery_codes: recoveryCodes,
+        });
+      } catch (recoveryErr) {
+        console.error('Recovery code generation error:', recoveryErr);
+        res.json({
+          message: '2FA enabled successfully',
+          instructions: 'Next time you login, a 6-digit code will be sent to your email',
+          recovery_codes: [],
+        });
+      }
     });
   });
 };
@@ -161,9 +195,26 @@ const resend2FACode = async (req, res) => {
   });
 };
 
+// Regenerate recovery codes
+const regenerateRecoveryCodes = async (req, res) => {
+  const userId = req.user.userId || req.user.id;
+
+  try {
+    const recoveryCodes = await generateRecoveryCodes(userId);
+    return res.json({
+      message: 'Recovery codes regenerated',
+      recovery_codes: recoveryCodes,
+    });
+  } catch (err) {
+    console.error('Recovery code regeneration error:', err);
+    return res.status(500).json({ error: 'Failed to regenerate recovery codes' });
+  }
+};
+
 module.exports = {
   enable2FA,
   disable2FA,
   verify2FA,
   resend2FACode,
+  regenerateRecoveryCodes,
 };

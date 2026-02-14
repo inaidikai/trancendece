@@ -27,6 +27,7 @@ export default defineConfig({
   server: {
     host: devHost,
     port: 5173,
+    strictPort: true,
     https: hasLocalCert
       ? {
           cert: fs.readFileSync(certFile),

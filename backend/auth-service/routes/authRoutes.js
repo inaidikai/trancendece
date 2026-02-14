@@ -36,5 +36,6 @@ router.post('/2fa/enable', authMiddleware, twoFAController.enable2FA);
 router.post('/2fa/disable', authMiddleware, twoFAController.disable2FA);
 router.post('/2fa/verify', authMiddleware, twoFAController.verify2FA);
 router.post('/2fa/resend-code', authMiddleware, twoFAController.resend2FACode);
+router.post('/2fa/recovery-codes', authMiddleware, twoFAController.regenerateRecoveryCodes);
 
 module.exports = router;

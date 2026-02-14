@@ -111,8 +111,9 @@ export function updateEntry(entryId, payload) {
   );
 }
 
-export function getFriends() {
-  return diaryRequest("/api/friends");
+export function getFriends(status) {
+  const url = status ? `/api/friends?status=${encodeURIComponent(status)}` : "/api/friends";
+  return diaryRequest(url);
 }
 
 export function searchUsers(query) {

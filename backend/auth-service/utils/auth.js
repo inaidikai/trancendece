@@ -35,10 +35,26 @@ const generateId = () => {
   return uuidv4();
 };
 
+const validatePasswordPolicy = (password) => {
+  const value = String(password || '');
+  const errors = [];
+
+  if (value.length < 8) errors.push('Be at least 8 characters');
+  if (!/[A-Z]/.test(value)) errors.push('Have at least 1 uppercase letter (A-Z)');
+  if (!/[a-z]/.test(value)) errors.push('Have at least 1 lowercase letter (a-z)');
+  if (!/[0-9]/.test(value)) errors.push('Have at least 1 number (0-9)');
+  if (!/[!@#$%^&*()_+\-=[\]{};:'",.<>/?\\|`~]/.test(value)) {
+    errors.push('Have at least 1 special character (!@#$%^&*()_+-=[]{}etc)');
+  }
+
+  return { valid: errors.length === 0, errors };
+};
+
 module.exports = {
   hashPassword,
   comparePassword,
   generateToken,
   verifyToken,
   generateId,
+  validatePasswordPolicy,
 };
