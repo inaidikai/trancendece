@@ -1,10 +1,8 @@
 services:
   postgres:
     image: postgres:16
-    environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: auth_db
+    env_file:
+      - ../.env
     ports:
       - "5432:5432"
     volumes:
@@ -18,14 +16,9 @@ services:
     env_file:
       - ../.env
     environment:
-      - JWT_SECRET=dev-super-secret-change-me
       - PGHOST=postgres
       - PGPORT=5432
-      - PGUSER=postgres
-      - PGPASSWORD=postgres
-      - PGDATABASE=auth_db
       - VAULT_ADDR=http://vault:8200
-      - VAULT_TOKEN=my-secret-token
       - VAULT_KV_PATHS=kv/data/app
       - VAULT_OVERRIDE=true
     expose:
@@ -48,19 +41,16 @@ services:
     build:
       context: ..
       dockerfile: backend/diary-service/Dockerfile
+    env_file:
+      - ../.env
     environment:
       - PORT=8002
-      - JWT_SECRET=dev-super-secret-change-me
       - CORS_ORIGINS=https://localhost:5173,https://127.0.0.1:5173
       - PGHOST=postgres
       - PGPORT=5432
-      - PGUSER=postgres
-      - PGPASSWORD=postgres
-      - PGDATABASE=auth_db
       - WS_SERVER_URL=http://realtime-service:8003
       - DIARY_REQUEST_BODY_LIMIT=10mb
       - VAULT_ADDR=http://vault:8200
-      - VAULT_TOKEN=my-secret-token
       - VAULT_KV_PATHS=kv/data/app
       - VAULT_OVERRIDE=true
     expose:
@@ -74,16 +64,13 @@ services:
     build:
       context: ..
       dockerfile: backend/realtime-service/Dockerfile
+    env_file:
+      - ../.env
     environment:
-      - JWT_SECRET=dev-super-secret-change-me
       - CORS_ORIGINS=https://localhost:5173,https://127.0.0.1:5173
       - PGHOST=postgres
       - PGPORT=5432
-      - PGUSER=postgres
-      - PGPASSWORD=postgres
-      - PGDATABASE=auth_db
       - VAULT_ADDR=http://vault:8200
-      - VAULT_TOKEN=my-secret-token
       - VAULT_KV_PATHS=kv/data/app
       - VAULT_OVERRIDE=true
     expose:
@@ -104,11 +91,11 @@ services:
       - user-service
       - diary-service
       - realtime-service
+    env_file:
+      - ../.env
     environment:
-      - JWT_SECRET=dev-super-secret-change-me
       - CORS_ORIGINS=https://localhost:5173,https://127.0.0.1:5173
       - VAULT_ADDR=http://vault:8200
-      - VAULT_TOKEN=my-secret-token
       - VAULT_KV_PATHS=kv/data/app
       - VAULT_OVERRIDE=true
     ports:
@@ -125,8 +112,7 @@ services:
     volumes:
       - ../backend/waf/config/modsecurity-hardened.conf:/etc/nginx/modsec/modsecurity-hardened.conf:ro
       - ../backend/waf/config/default.conf:/etc/nginx/templates/conf.d/default.conf.template:ro
-      - ./certs/quillow.local.crt:/etc/nginx/certs/quillow.local.crt:ro
-      - ./certs/quillow.local.key:/etc/nginx/certs/quillow.local.key:ro
+      - ./certs:/etc/nginx/certs:ro
     environment:
       - BACKEND=http://api-gateway:8080
       - WS_BACKEND=http://realtime-service:8003
@@ -144,7 +130,6 @@ services:
       timeout: 3s
       retries: 5
       start_period: 15s
-
 
   vault:
     image: hashicorp/vault:1.15

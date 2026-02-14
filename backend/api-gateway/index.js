@@ -62,20 +62,38 @@ app.register(httpProxy, {
   upstream: "http://auth-service:8000",
   prefix: "/auth",
 });
+app.register(httpProxy, {
+  upstream: "http://auth-service:8000",
+  prefix: "/api/auth",
+});
 
 app.register(httpProxy, {
   upstream: "http://user-service:8001",
   prefix: "/users",
+});
+app.register(httpProxy, {
+  upstream: "http://user-service:8001",
+  prefix: "/api/users",
 });
 
 app.register(httpProxy, {
   upstream: "http://diary-service:8002",
   prefix: "/diary",
 });
+app.register(httpProxy, {
+  upstream: "http://diary-service:8002",
+  prefix: "/api/diary",
+});
 
 app.register(httpProxy, {
   upstream: "http://realtime-service:8003",
   prefix: "/socket.io/",
+  rewritePrefix: "/socket.io/",
+  websocket: true,
+});
+app.register(httpProxy, {
+  upstream: "http://realtime-service:8003",
+  prefix: "/api/socket.io/",
   rewritePrefix: "/socket.io/",
   websocket: true,
 });

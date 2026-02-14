@@ -108,6 +108,14 @@ class EntriesController {
         `SELECT 
           e.*,
           (
+            SELECT c.role
+            FROM collaborators c
+            WHERE c.entry_id = e.id
+              AND c.user_id = $1
+              AND c.status = 'accepted'
+            LIMIT 1
+          ) AS my_role,
+          (
             SELECT COUNT(*) FROM collaborators 
             WHERE entry_id = e.id AND status = 'accepted'
           ) as collaborators_count

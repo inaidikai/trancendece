@@ -5,6 +5,7 @@ SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 PROJECT_ROOT=$(cd "$SCRIPT_DIR/../.." && pwd)
 ENV_FILE=${ENV_FILE:-"$PROJECT_ROOT/.env"}
 ENCRYPTED_SCRIPT=${ENCRYPTED_SCRIPT:-"$SCRIPT_DIR/bootstrap.vault.sh.gpg"}
+export ENV_FILE
 
 if [[ ! -f "$ENV_FILE" ]]; then
   echo "Missing env file: $ENV_FILE" >&2

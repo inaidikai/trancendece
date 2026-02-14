@@ -19,12 +19,12 @@ module.exports = fp(async function jwtPlugin(app) {
     const url = request.raw.url || "";
 
     // ✅ public routes
-    if (url.startsWith("/health")) return;
-    if (url.startsWith("/auth")) return;
+    if (url.startsWith("/health") || url.startsWith("/api/health")) return;
+    if (url.startsWith("/auth") || url.startsWith("/api/auth")) return;
 
     // ✅ Socket.IO handshake + upgrade must pass through gateway;
     // realtime-service will authenticate using socket.handshake.auth.token
-    if (url.startsWith("/socket.io")) return;
+    if (url.startsWith("/socket.io") || url.startsWith("/api/socket.io")) return;
 
     // everything else requires Authorization: Bearer <JWT>
     return app.authenticate(request, reply);

@@ -69,8 +69,16 @@ async function apiRequest(path, { method = "POST", body, headers, auth } = {}) {
       data = { message: text };
     }
   }
+if (!res.ok) {
+    // Global 401 handler - token expired or invalid
+    if (res.status === 401) {
+      clearToken();
+      // Redirect to login page
+      if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/auth')) {
+        window.location.href = '/auth/login';
+      }
+    }
 
-  if (!res.ok) {
     const serverMessage = data?.message || data?.error || "Request failed";
     const safeMessage =
       res.status >= 500

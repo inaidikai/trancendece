@@ -1,20 +1,30 @@
 const nodemailer = require('nodemailer');
+const { loadVaultSecrets } = require('../../shared/vault');
 
-// Create email transporter
-// In production, use your email service credentials
-const transporter = nodemailer.createTransport({
-  host: process.env.EMAIL_HOST || 'smtp.gmail.com',
-  port: process.env.EMAIL_PORT || 587,
-  secure: process.env.EMAIL_SECURE === 'true', // true for 465, false for other ports
-  auth: {
-    user: process.env.EMAIL_USER || 'your-email@gmail.com',
-    pass: process.env.EMAIL_PASSWORD || 'your-app-password',
-  },
-});
+async function getTransporter() {
+  if (!process.env.EMAIL_USER || !process.env.EMAIL_PASSWORD) {
+    try {
+      await loadVaultSecrets({ logger: console });
+    } catch (error) {
+      console.error('Vault reload for email failed:', error?.message || error);
+    }
+  }
+
+  return nodemailer.createTransport({
+    host: process.env.EMAIL_HOST || 'smtp.gmail.com',
+    port: Number(process.env.EMAIL_PORT || 587),
+    secure: process.env.EMAIL_SECURE === 'true',
+    auth: {
+      user: process.env.EMAIL_USER || 'your-email@gmail.com',
+      pass: process.env.EMAIL_PASSWORD || 'your-app-password',
+    },
+  });
+}
 
 // Send password reset email
 const sendPasswordResetEmail = async (email, resetToken, userName) => {
   try {
+    const transporter = await getTransporter();
     const resetLink = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/reset-password?token=${resetToken}`;
 
     const mailOptions = {
@@ -44,6 +54,7 @@ const sendPasswordResetEmail = async (email, resetToken, userName) => {
 // Send verification email
 const sendVerificationEmail = async (email, verificationToken, userName) => {
   try {
+    const transporter = await getTransporter();
     const verificationLink = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/verify-email?token=${verificationToken}`;
 
     const mailOptions = {
@@ -72,6 +83,7 @@ const sendVerificationEmail = async (email, verificationToken, userName) => {
 // Send welcome email
 const sendWelcomeEmail = async (email, userName) => {
   try {
+    const transporter = await getTransporter();
     const mailOptions = {
       from: process.env.EMAIL_FROM || 'noreply@auth.com',
       to: email,
@@ -113,6 +125,7 @@ const sendWelcomeEmail = async (email, userName) => {
 // Test email configuration
 const testEmailConfig = async () => {
   try {
+    const transporter = await getTransporter();
     await transporter.verify();
     console.log('✓ Email service configured correctly');
     return true;
@@ -125,6 +138,7 @@ const testEmailConfig = async () => {
 // Send OAuth verification code email
 const sendOAuthCodeEmail = async (email, code, userName) => {
   try {
+    const transporter = await getTransporter();
     const mailOptions = {
       from: process.env.EMAIL_FROM || 'noreply@auth.com',
       to: email,
@@ -151,6 +165,7 @@ const sendOAuthCodeEmail = async (email, code, userName) => {
 
 const sendTwoFAEmail = async (email, code, userName) => {
   try {
+    const transporter = await getTransporter();
     const mailOptions = {
       from: process.env.EMAIL_FROM || 'noreply@auth.com',
       to: email,

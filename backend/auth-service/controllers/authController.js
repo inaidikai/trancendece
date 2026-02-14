@@ -8,9 +8,19 @@ const {
   validatePasswordPolicy,
 } = require('../utils/auth');
 const { sendWelcomeEmail, sendTwoFAEmail } = require('../utils/emailService');
+const { loadVaultSecrets } = require('../../shared/vault');
 
 const TWO_FA_CODE_EXPIRY_MS = 10 * 60 * 1000;
 const OAUTH_STATE_TTL_MS = Number(process.env.OAUTH_STATE_TTL_MS || 10 * 60 * 1000);
+
+const ensureGoogleOAuthSecrets = async () => {
+  if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) return;
+  try {
+    await loadVaultSecrets({ logger: console });
+  } catch (error) {
+    console.error('Vault reload for Google OAuth failed:', error?.message || error);
+  }
+};
 
 const buildPending2FASubject = (userId) => `${userId}_2fa_pending`;
 
@@ -390,7 +400,8 @@ const getUserById = (req, res) => {
  * Initiates Google OAuth flow - returns Google authorization URL
  * Frontend redirects user to this URL
  */
-const googleAuthInit = (req, res) => {
+const googleAuthInit = async (req, res) => {
+  await ensureGoogleOAuthSecrets();
   const clientId = process.env.GOOGLE_CLIENT_ID;
   const redirectUri = process.env.GOOGLE_REDIRECT_URI || 'https://localhost:8081/auth/google/callback';
   
@@ -442,6 +453,7 @@ const googleAuthCallback = async (req, res) => {
     return res.status(400).json({ error: 'Missing code or state parameter' });
   }
 
+  await ensureGoogleOAuthSecrets();
   const clientId = process.env.GOOGLE_CLIENT_ID;
   const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
   const redirectUri = process.env.GOOGLE_REDIRECT_URI || 'https://localhost:8081/auth/google/callback';

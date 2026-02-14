@@ -917,7 +917,11 @@ export default function FlipBook({
     const collaborativeEntries = entries.filter(
       (item) => getEntryDiaryType(item) === DIARY_TYPE_COLLABORATIVE
     );
+    const acceptedSharedEntry = collaborativeEntries.find(
+      (item) => String(item.my_role || "").trim().length > 0
+    );
     const fallbackEntry =
+      acceptedSharedEntry ||
       collaborativeEntries.find((item) => String(item.owner_id || "") === String(meId || "")) ||
       collaborativeEntries[0] ||
       null;
@@ -1163,7 +1167,11 @@ export default function FlipBook({
             const matchingEntries = entries.filter(
               (item) => matchesDiaryType(item, requestedDiaryType)
             );
+            const acceptedSharedEntry = matchingEntries.find(
+              (item) => String(item.my_role || "").trim().length > 0
+            );
             entry =
+              acceptedSharedEntry ||
               matchingEntries.find((item) => String(item.owner_id || "") === String(meId || "")) ||
               matchingEntries[0] ||
               null;

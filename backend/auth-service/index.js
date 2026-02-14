@@ -45,6 +45,20 @@ const ensureAuthSchema = async () => {
   `);
 
   await db.query(`
+    CREATE TABLE IF NOT EXISTS oauth_states (
+      state TEXT PRIMARY KEY,
+      provider VARCHAR(50) NOT NULL,
+      expires_at TIMESTAMP NOT NULL,
+      created_at TIMESTAMP NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  await db.query(`
+    CREATE INDEX IF NOT EXISTS idx_oauth_states_expires_at
+    ON oauth_states (expires_at)
+  `);
+
+  await db.query(`
     DO $$
     BEGIN
       BEGIN
