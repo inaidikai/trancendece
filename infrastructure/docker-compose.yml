@@ -152,7 +152,9 @@ services:
       - internal
 
   vault-bootstrap:
-    image: curlimages/curl:8.6.0
+    build:
+      context: ..
+      dockerfile: backend/vault-bootstrap/Dockerfile
     user: "0:0"
     env_file:
       - ../.env
@@ -160,10 +162,7 @@ services:
       - VAULT_ADDR=https://vault:8200
       - VAULT_TLS_SKIP_VERIFY=true
     volumes:
-      - ./vault/seed.sh:/vault/seed.sh:ro
-      - ./vault/bootstrap.sh:/bootstrap.sh:ro
       - vault-shared:/vault/shared
-    command: ["sh", "/bootstrap.sh"]
     depends_on:
       vault:
         condition: service_healthy
