@@ -9,7 +9,7 @@ CERT_CRT := $(CERT_DIR)/quillow.local.crt
 CERT_CONF := $(CERT_DIR)/openssl-local.cnf
 NPM_DIRS := . frontend infrastructure backend/auth-service backend/user-service backend/diary-service backend/realtime-service backend/api-gateway
 
-.PHONY: all help make-start check-tools npm-self-update npm-install up down vault-dev dev fclean certs
+.PHONY: all help make-start check-tools npm-self-update npm-install up down dev fclean certs
 
 all: make-start
 
@@ -19,7 +19,6 @@ help:
 	@echo "  certs             : create local HTTPS cert/key if missing"
 	@echo "  up                : docker compose up -d --build"
 	@echo "  down              : docker compose down --remove-orphans"
-	@echo "  vault-dev         : dev: auto-init+unseal+seed vault; writes token under infrastructure/vault/dev-secrets/"
 	@echo "  fclean            : alias of down"
 	@echo "  npm-install       : npm install in all package folders"
 	@echo "  npm-self-update   : try updating npm CLI globally"
@@ -75,12 +74,6 @@ up:
 down:
 	@echo "Stopping docker compose services..."
 	@cd $(COMPOSE_DIR) && $(COMPOSE_CMD) down --remove-orphans
-
-vault-dev:
-	@echo "Bootstrapping Vault (dev mode: init+unseal+seed)..."
-	@cd $(COMPOSE_DIR) && $(COMPOSE_CMD) up -d vault user-service
-	@echo "Vault dev token file is in docker volume 'vault-dev-secrets' (mounted at /vault/dev-secrets)."
-	@echo "To print it: cd infrastructure && docker compose exec -T user-service cat /vault/dev-secrets/app-token"
 
 dev:
 	@if lsof -ti :5173 >/dev/null 2>&1; then \

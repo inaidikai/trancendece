@@ -21,34 +21,19 @@ services:
       - VAULT_ADDR=http://vault:8200
       - VAULT_KV_PATHS=kv/data/app
       - VAULT_OVERRIDE=true
-      - VAULT_TOKEN_FILE=/vault/dev-secrets/app-token
     expose:
       - "8000"
     networks:
       - internal
     depends_on:
       - postgres
-      - user-service
-    volumes:
-      - vault-dev-secrets:/vault/dev-secrets:ro
 
   user-service:
-    # Repurposed: dev Vault ops sidecar (init/unseal/seed/token)
-    image: hashicorp/vault:1.15
-    env_file:
-      - ../.env
-    environment:
-      - VAULT_ADDR=http://vault:8200
-      - VAULT_KV_MOUNT=kv
-      - VAULT_KV_APP_PATH=app
-      - VAULT_KV_POLICY_PATH=kv/data/app
-      - WATCH=${WATCH:-0}
-    volumes:
-      - ./vault/dev-ops.sh:/usr/local/bin/dev-ops.sh:ro
-      - vault-dev-secrets:/vault/dev-secrets
-    command: ["sh", "/usr/local/bin/dev-ops.sh"]
-    depends_on:
-      - vault
+    build:
+      context: ..
+      dockerfile: backend/user-service/Dockerfile
+    expose:
+      - "8001"
     networks:
       - internal
 
@@ -68,16 +53,12 @@ services:
       - VAULT_ADDR=http://vault:8200
       - VAULT_KV_PATHS=kv/data/app
       - VAULT_OVERRIDE=true
-      - VAULT_TOKEN_FILE=/vault/dev-secrets/app-token
     expose:
       - "8002"
     networks:
       - internal
     depends_on:
       - postgres
-      - user-service
-    volumes:
-      - vault-dev-secrets:/vault/dev-secrets:ro
 
   realtime-service:
     build:
@@ -92,16 +73,12 @@ services:
       - VAULT_ADDR=http://vault:8200
       - VAULT_KV_PATHS=kv/data/app
       - VAULT_OVERRIDE=true
-      - VAULT_TOKEN_FILE=/vault/dev-secrets/app-token
     expose:
       - "8003"
     networks:
       - internal
     depends_on:
       - postgres
-      - user-service
-    volumes:
-      - vault-dev-secrets:/vault/dev-secrets:ro
 
   api-gateway:
     build:
@@ -121,13 +98,10 @@ services:
       - VAULT_ADDR=http://vault:8200
       - VAULT_KV_PATHS=kv/data/app
       - VAULT_OVERRIDE=true
-      - VAULT_TOKEN_FILE=/vault/dev-secrets/app-token
     ports:
       - "8080:8080"
     networks:
       - internal
-    volumes:
-      - vault-dev-secrets:/vault/dev-secrets:ro
 
   waf:
     image: owasp/modsecurity-crs:nginx-alpine
@@ -186,4 +160,3 @@ networks:
 
 volumes:
   vault-data:
-  vault-dev-secrets:
