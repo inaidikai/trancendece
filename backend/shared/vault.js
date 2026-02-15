@@ -1,5 +1,6 @@
 const DEFAULT_KV_PATHS = 'kv/data/app';
-const { Agent } = require('undici');
+const http = require('node:http');
+const https = require('node:https');
 
 function boolEnv(name, def = false) {
   const v = String(process.env[name] || '').toLowerCase();
@@ -20,16 +21,49 @@ function toEnvValue(value) {
   return JSON.stringify(value);
 }
 
-async function fetchJson(url, headers, fetchOptions = {}) {
-  const res = await fetch(url, { headers, ...fetchOptions });
-  if (res.status === 404) return null;
-  if (!res.ok) {
-    const text = await res.text();
-    const err = new Error(`Vault request failed: ${res.status} ${res.statusText}`);
-    err.details = text;
-    throw err;
-  }
-  return res.json();
+function requestJson(urlStr, headers, options = {}) {
+  const url = new URL(urlStr);
+  const isHttps = url.protocol === 'https:';
+  const client = isHttps ? https : http;
+
+  const reqOptions = {
+    protocol: url.protocol,
+    hostname: url.hostname,
+    port: url.port || (isHttps ? 443 : 80),
+    path: `${url.pathname}${url.search}`,
+    method: 'GET',
+    headers,
+  };
+
+  if (isHttps && options.tlsSkipVerify) reqOptions.rejectUnauthorized = false;
+
+  return new Promise((resolve, reject) => {
+    const req = client.request(reqOptions, (res) => {
+      let body = '';
+      res.setEncoding('utf8');
+      res.on('data', (chunk) => {
+        body += chunk;
+      });
+      res.on('end', () => {
+        if (res.statusCode === 404) return resolve(null);
+        if (!res.statusCode || res.statusCode < 200 || res.statusCode >= 300) {
+          const err = new Error(`Vault request failed: ${res.statusCode} ${res.statusMessage || ''}`.trim());
+          err.details = body;
+          return reject(err);
+        }
+        try {
+          return resolve(body ? JSON.parse(body) : {});
+        } catch {
+          const err = new Error('Vault response was not valid JSON');
+          err.details = body;
+          return reject(err);
+        }
+      });
+    });
+
+    req.on('error', reject);
+    req.end();
+  });
 }
 
 async function loadVaultSecrets(options = {}) {
@@ -41,11 +75,6 @@ async function loadVaultSecrets(options = {}) {
   const override = String(process.env.VAULT_OVERRIDE || '').toLowerCase() === 'true';
   const failFast = String(process.env.VAULT_FAIL_FAST || '').toLowerCase() === 'true';
   const tlsSkipVerify = boolEnv('VAULT_TLS_SKIP_VERIFY', false);
-
-  // Only relax TLS for Vault calls, not globally.
-  const fetchOptions = tlsSkipVerify
-    ? { dispatcher: new Agent({ connect: { rejectUnauthorized: false } }) }
-    : {};
 
   if (!addr || !token) {
     logger.info('Vault not configured; skipping secret load.');
@@ -62,7 +91,7 @@ async function loadVaultSecrets(options = {}) {
   for (const path of paths) {
     try {
       const url = `${addr.replace(/\/$/, '')}/v1/${path}`;
-      const data = await fetchJson(url, headers, fetchOptions);
+      const data = await requestJson(url, headers, { tlsSkipVerify });
       if (!data) continue;
 
       const payload = data?.data?.data || data?.data || {};
