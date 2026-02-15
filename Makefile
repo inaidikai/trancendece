@@ -78,8 +78,7 @@ down:
 
 vault-seed:
 	@echo "Seeding Vault KV..."
-	@VAULT_ADDR=http://localhost:8200 VAULT_TOKEN=$${VAULT_TOKEN:-my-secret-token} \
-		sh infrastructure/vault/seed.sh
+	@cd $(COMPOSE_DIR) && $(COMPOSE_CMD) run --rm vault-seed >/dev/null
 
 dev:
 	@if lsof -ti :5173 >/dev/null 2>&1; then \

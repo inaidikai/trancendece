@@ -18,9 +18,10 @@ services:
     environment:
       - PGHOST=postgres
       - PGPORT=5432
-      - VAULT_ADDR=http://vault:8200
+      - VAULT_ADDR=https://vault:8200
       - VAULT_KV_PATHS=kv/data/app
       - VAULT_OVERRIDE=true
+      - VAULT_TLS_SKIP_VERIFY=true
     expose:
       - "8000"
     networks:
@@ -41,9 +42,10 @@ services:
       - PGPORT=5432
       - WS_SERVER_URL=http://realtime-service:8003
       - DIARY_REQUEST_BODY_LIMIT=10mb
-      - VAULT_ADDR=http://vault:8200
+      - VAULT_ADDR=https://vault:8200
       - VAULT_KV_PATHS=kv/data/app
       - VAULT_OVERRIDE=true
+      - VAULT_TLS_SKIP_VERIFY=true
     expose:
       - "8002"
     networks:
@@ -61,9 +63,10 @@ services:
       - CORS_ORIGINS=https://localhost:5173,https://127.0.0.1:5173
       - PGHOST=postgres
       - PGPORT=5432
-      - VAULT_ADDR=http://vault:8200
+      - VAULT_ADDR=https://vault:8200
       - VAULT_KV_PATHS=kv/data/app
       - VAULT_OVERRIDE=true
+      - VAULT_TLS_SKIP_VERIFY=true
     expose:
       - "8003"
     networks:
@@ -85,9 +88,10 @@ services:
       - ../.env
     environment:
       - CORS_ORIGINS=https://localhost:5173,https://127.0.0.1:5173
-      - VAULT_ADDR=http://vault:8200
+      - VAULT_ADDR=https://vault:8200
       - VAULT_KV_PATHS=kv/data/app
       - VAULT_OVERRIDE=true
+      - VAULT_TLS_SKIP_VERIFY=true
     ports:
       - "8080:8080"
     networks:
@@ -124,21 +128,36 @@ services:
   vault:
     image: hashicorp/vault:1.15
     container_name: security_vault
-    # Dev mode: unsealed, in-memory, single root token (do not use for production)
-    command: ["vault", "server", "-dev", "-dev-listen-address=0.0.0.0:8200", "-dev-root-token-id=${VAULT_TOKEN:-my-secret-token}"]
-    ports:
-      - "8200:8200"
+    # Dev TLS mode: encrypted transport, but still dev semantics (do not use for production)
+    command: ["vault", "server", "-dev", "-dev-tls", "-dev-listen-address=0.0.0.0:8200", "-dev-root-token-id=${VAULT_TOKEN:-my-secret-token}"]
     environment:
-      - VAULT_ADDR=http://vault:8200
-      - VAULT_API_ADDR=http://vault:8200
+      - VAULT_ADDR=https://vault:8200
+      - VAULT_API_ADDR=https://vault:8200
     cap_add:
       - IPC_LOCK
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8200/v1/sys/health >/dev/null 2>&1 || exit 1"]
+      test: ["CMD-SHELL", "VAULT_ADDR=https://127.0.0.1:8200 vault status -tls-skip-verify >/dev/null 2>&1 || exit 1"]
       interval: 10s
       timeout: 3s
       retries: 10
       start_period: 20s
+    networks:
+      - internal
+
+  vault-seed:
+    image: curlimages/curl:8.6.0
+    env_file:
+      - ../.env
+    environment:
+      - VAULT_ADDR=https://vault:8200
+      - VAULT_TLS_SKIP_VERIFY=true
+      - VAULT_KV_PATH=kv/data/app
+    volumes:
+      - ./vault/seed.sh:/seed.sh:ro
+    command: ["sh", "/seed.sh"]
+    depends_on:
+      vault:
+        condition: service_healthy
     networks:
       - internal
 

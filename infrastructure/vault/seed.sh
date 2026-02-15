@@ -1,28 +1,37 @@
 #!/usr/bin/env sh
 set -eu
 
-VAULT_ADDR=${VAULT_ADDR:-http://vault:8200}
+VAULT_ADDR=${VAULT_ADDR:-https://vault:8200}
 VAULT_TOKEN=${VAULT_TOKEN:-my-secret-token}
 VAULT_KV_PATH=${VAULT_KV_PATH:-kv/data/app}
+VAULT_TLS_SKIP_VERIFY=${VAULT_TLS_SKIP_VERIFY:-true}
+
+curl_cmd() {
+  if [ "$VAULT_TLS_SKIP_VERIFY" = "true" ] || [ "$VAULT_TLS_SKIP_VERIFY" = "1" ]; then
+    curl -ksS "$@"
+  else
+    curl -sS "$@"
+  fi
+}
 
 wait_for_vault() {
-  for i in $(seq 1 30); do
-    if curl -s "$VAULT_ADDR/v1/sys/health" >/dev/null; then
-      return 0
-    fi
+  i=1
+  while [ "$i" -le 30 ]; do
+    if curl_cmd "$VAULT_ADDR/v1/sys/health" >/dev/null 2>&1; then return 0; fi
     sleep 1
+    i=$((i+1))
   done
   echo "Vault not reachable" >&2
   return 1
 }
 
 enable_kv_v2() {
-  status=$(curl -s -o /dev/null -w "%{http_code}" \
+  status=$(curl_cmd -o /dev/null -w "%{http_code}" \
     -H "X-Vault-Token: $VAULT_TOKEN" \
     "$VAULT_ADDR/v1/sys/mounts/kv")
 
   if [ "$status" = "404" ]; then
-    curl -sS -H "X-Vault-Token: $VAULT_TOKEN" \
+    curl_cmd -H "X-Vault-Token: $VAULT_TOKEN" \
       -H "Content-Type: application/json" \
       -X POST \
       -d '{"type":"kv","options":{"version":"2"}}' \
@@ -79,7 +88,7 @@ enable_kv_v2
 
 payload=$(build_payload)
 
-curl -sS -H "X-Vault-Token: $VAULT_TOKEN" \
+curl_cmd -H "X-Vault-Token: $VAULT_TOKEN" \
   -H "Content-Type: application/json" \
   -X POST \
   -d "$payload" \
