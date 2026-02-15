@@ -39,25 +39,11 @@ async function fetchJson(url, headers) {
 async function loadVaultSecrets(options = {}) {
   const logger = options.logger || console;
   const addr = process.env.VAULT_ADDR;
-  const tokenFile = process.env.VAULT_TOKEN_FILE;
-  let token = process.env.VAULT_TOKEN || readTokenFromFile(tokenFile);
+  const token = process.env.VAULT_TOKEN || readTokenFromFile(process.env.VAULT_TOKEN_FILE);
   const namespace = process.env.VAULT_NAMESPACE;
   const paths = splitPaths(process.env.VAULT_KV_PATHS || DEFAULT_KV_PATHS);
   const override = String(process.env.VAULT_OVERRIDE || '').toLowerCase() === 'true';
   const failFast = String(process.env.VAULT_FAIL_FAST || '').toLowerCase() === 'true';
-
-  // In our dev setup, a sidecar writes the Vault token to a shared file.
-  // Give it a moment on cold starts so services don't race on boot.
-  if (addr && !token && tokenFile) {
-    const maxMs = Number(process.env.VAULT_TOKEN_WAIT_MS || 30_000);
-    const intervalMs = Number(process.env.VAULT_TOKEN_WAIT_INTERVAL_MS || 500);
-    const started = Date.now();
-    while (!token && Date.now() - started < maxMs) {
-      // eslint-disable-next-line no-await-in-loop
-      await new Promise((r) => setTimeout(r, intervalMs));
-      token = readTokenFromFile(tokenFile);
-    }
-  }
 
   if (!addr || !token) {
     logger.info('Vault not configured; skipping secret load.');
