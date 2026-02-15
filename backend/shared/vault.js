@@ -1,4 +1,15 @@
 const DEFAULT_KV_PATHS = 'kv/data/app';
+const fs = require('node:fs');
+
+function readTokenFromFile(tokenFile) {
+  if (!tokenFile) return '';
+  try {
+    const raw = fs.readFileSync(tokenFile, 'utf8');
+    return String(raw || '').trim();
+  } catch {
+    return '';
+  }
+}
 
 function splitPaths(raw) {
   return String(raw || '')
@@ -28,7 +39,7 @@ async function fetchJson(url, headers) {
 async function loadVaultSecrets(options = {}) {
   const logger = options.logger || console;
   const addr = process.env.VAULT_ADDR;
-  const token = process.env.VAULT_TOKEN;
+  const token = process.env.VAULT_TOKEN || readTokenFromFile(process.env.VAULT_TOKEN_FILE);
   const namespace = process.env.VAULT_NAMESPACE;
   const paths = splitPaths(process.env.VAULT_KV_PATHS || DEFAULT_KV_PATHS);
   const override = String(process.env.VAULT_OVERRIDE || '').toLowerCase() === 'true';

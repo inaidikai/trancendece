@@ -14,3 +14,4 @@ infrastructure/certs/*.srl
 # Vault bootstrap artifacts
 infrastructure/vault/bootstrap.vault.source.sh
 infrastructure/vault/*.tmp
+infrastructure/vault/dev-secrets/
