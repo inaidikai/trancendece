@@ -1,4 +1,4 @@
-const DEFAULT_KV_PATHS = 'kv/data/app';
+const DEFAULT_KV_PATHS = 'secret/data/app';
 const http = require('node:http');
 const https = require('node:https');
 

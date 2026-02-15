@@ -3,15 +3,24 @@ set -eu
 
 VAULT_ADDR=${VAULT_ADDR:-https://vault:8200}
 VAULT_TOKEN=${VAULT_TOKEN:-my-secret-token}
-VAULT_KV_PATH=${VAULT_KV_PATH:-kv/data/app}
+VAULT_KV_PATH=${VAULT_KV_PATH:-secret/data/app}
 VAULT_TLS_SKIP_VERIFY=${VAULT_TLS_SKIP_VERIFY:-true}
 
 curl_cmd() {
   if [ "$VAULT_TLS_SKIP_VERIFY" = "true" ] || [ "$VAULT_TLS_SKIP_VERIFY" = "1" ]; then
-    curl -ksS "$@"
+    curl -kfsS "$@"
   else
-    curl -sS "$@"
+    curl -fsS "$@"
   fi
+}
+
+json_escape() {
+  # Escape for JSON string context.
+  # shellcheck disable=SC2001
+  printf '%s' "$1" | sed \
+    -e 's/\\/\\\\/g' \
+    -e 's/"/\\"/g' \
+    -e ':a;N;$!ba;s/\n/\\n/g'
 }
 
 wait_for_vault() {
@@ -26,16 +35,17 @@ wait_for_vault() {
 }
 
 enable_kv_v2() {
+  # Dev Vault already mounts KV v2 at secret/. Keep this as a no-op helper.
   status=$(curl_cmd -o /dev/null -w "%{http_code}" \
     -H "X-Vault-Token: $VAULT_TOKEN" \
-    "$VAULT_ADDR/v1/sys/mounts/kv")
+    "$VAULT_ADDR/v1/sys/mounts/secret")
 
   if [ "$status" = "404" ]; then
     curl_cmd -H "X-Vault-Token: $VAULT_TOKEN" \
       -H "Content-Type: application/json" \
       -X POST \
       -d '{"type":"kv","options":{"version":"2"}}' \
-      "$VAULT_ADDR/v1/sys/mounts/kv" >/dev/null
+      "$VAULT_ADDR/v1/sys/mounts/secret" >/dev/null
   fi
 }
 
@@ -61,23 +71,23 @@ build_payload() {
   cat <<JSON
 {
   "data": {
-    "JWT_SECRET": "${JWT_SECRET}",
-    "FRONTEND_URL": "${FRONTEND_URL}",
-    "GOOGLE_CLIENT_ID": "${GOOGLE_CLIENT_ID}",
-    "GOOGLE_CLIENT_SECRET": "${GOOGLE_CLIENT_SECRET}",
-    "GOOGLE_REDIRECT_URI": "${GOOGLE_REDIRECT_URI}",
-    "EMAIL_HOST": "${EMAIL_HOST}",
-    "EMAIL_PORT": "${EMAIL_PORT}",
-    "EMAIL_SECURE": "${EMAIL_SECURE}",
-    "EMAIL_USER": "${EMAIL_USER}",
-    "EMAIL_PASSWORD": "${EMAIL_PASSWORD}",
-    "EMAIL_FROM": "${EMAIL_FROM}",
-    "PGHOST": "${PGHOST}",
-    "PGPORT": "${PGPORT}",
-    "PGUSER": "${PGUSER}",
-    "PGPASSWORD": "${PGPASSWORD}",
-    "PGDATABASE": "${PGDATABASE}",
-    "CORS_ORIGINS": "${CORS_ORIGINS}"
+    "JWT_SECRET": "$(json_escape "$JWT_SECRET")",
+    "FRONTEND_URL": "$(json_escape "$FRONTEND_URL")",
+    "GOOGLE_CLIENT_ID": "$(json_escape "$GOOGLE_CLIENT_ID")",
+    "GOOGLE_CLIENT_SECRET": "$(json_escape "$GOOGLE_CLIENT_SECRET")",
+    "GOOGLE_REDIRECT_URI": "$(json_escape "$GOOGLE_REDIRECT_URI")",
+    "EMAIL_HOST": "$(json_escape "$EMAIL_HOST")",
+    "EMAIL_PORT": "$(json_escape "$EMAIL_PORT")",
+    "EMAIL_SECURE": "$(json_escape "$EMAIL_SECURE")",
+    "EMAIL_USER": "$(json_escape "$EMAIL_USER")",
+    "EMAIL_PASSWORD": "$(json_escape "$EMAIL_PASSWORD")",
+    "EMAIL_FROM": "$(json_escape "$EMAIL_FROM")",
+    "PGHOST": "$(json_escape "$PGHOST")",
+    "PGPORT": "$(json_escape "$PGPORT")",
+    "PGUSER": "$(json_escape "$PGUSER")",
+    "PGPASSWORD": "$(json_escape "$PGPASSWORD")",
+    "PGDATABASE": "$(json_escape "$PGDATABASE")",
+    "CORS_ORIGINS": "$(json_escape "$CORS_ORIGINS")"
   }
 }
 JSON

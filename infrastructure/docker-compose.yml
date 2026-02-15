@@ -19,7 +19,8 @@ services:
       - PGHOST=postgres
       - PGPORT=5432
       - VAULT_ADDR=https://vault:8200
-      - VAULT_KV_PATHS=kv/data/app
+      - VAULT_TOKEN=my-secret-token
+      - VAULT_KV_PATHS=secret/data/app
       - VAULT_OVERRIDE=true
       - VAULT_TLS_SKIP_VERIFY=true
     expose:
@@ -43,7 +44,8 @@ services:
       - WS_SERVER_URL=http://realtime-service:8003
       - DIARY_REQUEST_BODY_LIMIT=10mb
       - VAULT_ADDR=https://vault:8200
-      - VAULT_KV_PATHS=kv/data/app
+      - VAULT_TOKEN=my-secret-token
+      - VAULT_KV_PATHS=secret/data/app
       - VAULT_OVERRIDE=true
       - VAULT_TLS_SKIP_VERIFY=true
     expose:
@@ -64,7 +66,8 @@ services:
       - PGHOST=postgres
       - PGPORT=5432
       - VAULT_ADDR=https://vault:8200
-      - VAULT_KV_PATHS=kv/data/app
+      - VAULT_TOKEN=my-secret-token
+      - VAULT_KV_PATHS=secret/data/app
       - VAULT_OVERRIDE=true
       - VAULT_TLS_SKIP_VERIFY=true
     expose:
@@ -89,7 +92,8 @@ services:
     environment:
       - CORS_ORIGINS=https://localhost:5173,https://127.0.0.1:5173
       - VAULT_ADDR=https://vault:8200
-      - VAULT_KV_PATHS=kv/data/app
+      - VAULT_TOKEN=my-secret-token
+      - VAULT_KV_PATHS=secret/data/app
       - VAULT_OVERRIDE=true
       - VAULT_TLS_SKIP_VERIFY=true
     ports:
@@ -129,7 +133,7 @@ services:
     image: hashicorp/vault:1.15
     container_name: security_vault
     # Dev TLS mode: encrypted transport, but still dev semantics (do not use for production)
-    command: ["vault", "server", "-dev", "-dev-tls", "-dev-listen-address=0.0.0.0:8200", "-dev-root-token-id=${VAULT_TOKEN:-my-secret-token}"]
+    command: ["vault", "server", "-dev", "-dev-tls", "-dev-listen-address=0.0.0.0:8200", "-dev-root-token-id=my-secret-token"]
     environment:
       - VAULT_ADDR=https://vault:8200
       - VAULT_API_ADDR=https://vault:8200
@@ -150,8 +154,9 @@ services:
       - ../.env
     environment:
       - VAULT_ADDR=https://vault:8200
+      - VAULT_TOKEN=my-secret-token
       - VAULT_TLS_SKIP_VERIFY=true
-      - VAULT_KV_PATH=kv/data/app
+      - VAULT_KV_PATH=secret/data/app
     volumes:
       - ./vault/seed.sh:/seed.sh:ro
     command: ["sh", "/seed.sh"]
