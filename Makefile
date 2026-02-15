@@ -9,7 +9,7 @@ CERT_CRT := $(CERT_DIR)/quillow.local.crt
 CERT_CONF := $(CERT_DIR)/openssl-local.cnf
 NPM_DIRS := . frontend infrastructure backend/auth-service backend/user-service backend/diary-service backend/realtime-service backend/api-gateway
 
-.PHONY: all help make-start check-tools npm-self-update npm-install up down vault-seed dev fclean certs
+.PHONY: all help make-start check-tools npm-self-update npm-install up down vault-bootstrap dev fclean certs
 
 all: make-start
 
@@ -19,12 +19,12 @@ help:
 	@echo "  certs             : create local HTTPS cert/key if missing"
 	@echo "  up                : docker compose up -d --build"
 	@echo "  down              : docker compose down --remove-orphans"
-	@echo "  vault-seed        : seed Vault KV from .env (dev mode)"
+	@echo "  vault-bootstrap   : run vault bootstrap container (seed + create app token)"
 	@echo "  fclean            : alias of down"
 	@echo "  npm-install       : npm install in all package folders"
 	@echo "  npm-self-update   : try updating npm CLI globally"
 
-make-start: check-tools certs npm-self-update npm-install up vault-seed dev
+make-start: check-tools certs npm-self-update npm-install up vault-bootstrap dev
 
 check-tools:
 	@command -v docker >/dev/null || { echo "docker is required"; exit 1; }
@@ -70,15 +70,16 @@ npm-install:
 
 up:
 	@echo "Starting docker compose services..."
-	@cd $(COMPOSE_DIR) && $(COMPOSE_CMD) up -d --build
+	@cd $(COMPOSE_DIR) && $(COMPOSE_CMD) up -d --build vault postgres
 
 down:
 	@echo "Stopping docker compose services..."
 	@cd $(COMPOSE_DIR) && $(COMPOSE_CMD) down --remove-orphans
 
-vault-seed:
-	@echo "Seeding Vault KV..."
-	@cd $(COMPOSE_DIR) && $(COMPOSE_CMD) run --rm vault-seed >/dev/null
+vault-bootstrap:
+	@echo "Bootstrapping Vault (seed + app token)..."
+	@cd $(COMPOSE_DIR) && $(COMPOSE_CMD) run --rm vault-bootstrap >/dev/null
+	@cd $(COMPOSE_DIR) && $(COMPOSE_CMD) up -d --build auth-service diary-service realtime-service api-gateway waf
 
 dev:
 	@if lsof -ti :5173 >/dev/null 2>&1; then \

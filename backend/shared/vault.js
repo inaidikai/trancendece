@@ -1,6 +1,16 @@
 const DEFAULT_KV_PATHS = 'secret/data/app';
 const http = require('node:http');
 const https = require('node:https');
+const fs = require('node:fs');
+
+function readTokenFile(path) {
+  if (!path) return '';
+  try {
+    return String(fs.readFileSync(path, 'utf8') || '').trim();
+  } catch {
+    return '';
+  }
+}
 
 function boolEnv(name, def = false) {
   const v = String(process.env[name] || '').toLowerCase();
@@ -69,12 +79,25 @@ function requestJson(urlStr, headers, options = {}) {
 async function loadVaultSecrets(options = {}) {
   const logger = options.logger || console;
   const addr = process.env.VAULT_ADDR;
-  const token = process.env.VAULT_TOKEN;
+  const tokenFile = process.env.VAULT_TOKEN_FILE;
+  let token = process.env.VAULT_TOKEN || readTokenFile(tokenFile);
   const namespace = process.env.VAULT_NAMESPACE;
   const paths = splitPaths(process.env.VAULT_KV_PATHS || DEFAULT_KV_PATHS);
   const override = String(process.env.VAULT_OVERRIDE || '').toLowerCase() === 'true';
   const failFast = String(process.env.VAULT_FAIL_FAST || '').toLowerCase() === 'true';
   const tlsSkipVerify = boolEnv('VAULT_TLS_SKIP_VERIFY', false);
+
+  // If token is produced by a bootstrap container, wait briefly on cold starts.
+  if (addr && !token && tokenFile) {
+    const maxMs = Number(process.env.VAULT_TOKEN_WAIT_MS || 30_000);
+    const intervalMs = Number(process.env.VAULT_TOKEN_WAIT_INTERVAL_MS || 250);
+    const started = Date.now();
+    while (!token && Date.now() - started < maxMs) {
+      // eslint-disable-next-line no-await-in-loop
+      await new Promise((r) => setTimeout(r, intervalMs));
+      token = readTokenFile(tokenFile);
+    }
+  }
 
   if (!addr || !token) {
     logger.info('Vault not configured; skipping secret load.');
