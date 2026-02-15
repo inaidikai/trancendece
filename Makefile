@@ -9,7 +9,7 @@ CERT_CRT := $(CERT_DIR)/quillow.local.crt
 CERT_CONF := $(CERT_DIR)/openssl-local.cnf
 NPM_DIRS := . frontend infrastructure backend/auth-service backend/user-service backend/diary-service backend/realtime-service backend/api-gateway
 
-.PHONY: all help make-start check-tools npm-self-update npm-install up down dev fclean certs
+.PHONY: all help make-start check-tools npm-self-update npm-install up down vault-seed dev fclean certs
 
 all: make-start
 
@@ -19,11 +19,12 @@ help:
 	@echo "  certs             : create local HTTPS cert/key if missing"
 	@echo "  up                : docker compose up -d --build"
 	@echo "  down              : docker compose down --remove-orphans"
+	@echo "  vault-seed        : seed Vault KV from .env (dev mode)"
 	@echo "  fclean            : alias of down"
 	@echo "  npm-install       : npm install in all package folders"
 	@echo "  npm-self-update   : try updating npm CLI globally"
 
-make-start: check-tools certs npm-self-update npm-install up dev
+make-start: check-tools certs npm-self-update npm-install up vault-seed dev
 
 check-tools:
 	@command -v docker >/dev/null || { echo "docker is required"; exit 1; }
@@ -74,6 +75,11 @@ up:
 down:
 	@echo "Stopping docker compose services..."
 	@cd $(COMPOSE_DIR) && $(COMPOSE_CMD) down --remove-orphans
+
+vault-seed:
+	@echo "Seeding Vault KV..."
+	@VAULT_ADDR=http://localhost:8200 VAULT_TOKEN=$${VAULT_TOKEN:-my-secret-token} \
+		sh infrastructure/vault/seed.sh
 
 dev:
 	@if lsof -ti :5173 >/dev/null 2>&1; then \
