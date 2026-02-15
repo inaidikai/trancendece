@@ -134,7 +134,8 @@ services:
   vault:
     image: hashicorp/vault:1.15
     container_name: security_vault
-    command: ["vault", "server", "-config=/vault/config/config.hcl"]
+    # Dev mode: unsealed, in-memory, single root token (do not use for production)
+    command: ["vault", "server", "-dev", "-dev-listen-address=0.0.0.0:8200", "-dev-root-token-id=${VAULT_TOKEN:-my-secret-token}"]
     ports:
       - "8200:8200"
     environment:
@@ -143,8 +144,8 @@ services:
     cap_add:
       - IPC_LOCK
     volumes:
-      - ./vault/config.hcl:/vault/config/config.hcl:ro
-      - vault-data:/vault/file
+      # No persistent storage in dev mode; Vault is reset if container is removed
+      - ./vault:/vault:ro
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8200/v1/sys/health >/dev/null 2>&1 || exit 1"]
       interval: 10s
