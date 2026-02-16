@@ -8,7 +8,16 @@ const API_BASE = (import.meta.env?.VITE_API_URL || "/api").replace(/\/$/, "");
 export async function signInWithGoogle() {
   try {
     const response = await fetch(`${API_BASE}/auth/google/auth-url`);
-    if (!response.ok) throw new Error('Failed to get Google auth URL');
+    if (!response.ok) {
+      let message = 'Failed to get Google auth URL';
+      try {
+        const data = await response.json();
+        message = data?.error || data?.message || message;
+      } catch {
+        // Keep fallback message when response is not JSON.
+      }
+      throw new Error(message);
+    }
     
     const { authUrl } = await response.json();
     window.location.href = authUrl;

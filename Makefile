@@ -19,7 +19,7 @@ help:
 	@echo "  certs             : create local HTTPS cert/key if missing"
 	@echo "  up                : docker compose up -d --build"
 	@echo "  down              : docker compose down --remove-orphans"
-	@echo "  vault-bootstrap   : run vault bootstrap container (seed + create app token)"
+	@echo "  vault-bootstrap   : init/unseal Vault if needed, store env secrets, set policy, create app token"
 	@echo "  vault-dev         : alias of vault-bootstrap"
 	@echo "  fclean            : alias of down"
 	@echo "  npm-install       : npm install in all package folders"
@@ -32,6 +32,7 @@ check-tools:
 	@docker compose version >/dev/null || { echo "docker compose is required"; exit 1; }
 	@command -v npm >/dev/null || { echo "npm is required"; exit 1; }
 	@command -v openssl >/dev/null || { echo "openssl is required"; exit 1; }
+	@command -v vault >/dev/null || echo "vault CLI not found on host (bootstrap container includes vault CLI)."
 
 certs:
 	@mkdir -p $(CERT_DIR)
@@ -78,8 +79,8 @@ down:
 	@cd $(COMPOSE_DIR) && $(COMPOSE_CMD) down --remove-orphans
 
 vault-bootstrap: up
-	@echo "Bootstrapping Vault (seed + app token)..."
-	@cd $(COMPOSE_DIR) && $(COMPOSE_CMD) run --rm vault-bootstrap >/dev/null
+	@echo "Bootstrapping Vault (init/unseal + secrets + policy + app token)..."
+	@cd $(COMPOSE_DIR) && $(COMPOSE_CMD) run --rm vault-bootstrap
 	@cd $(COMPOSE_DIR) && $(COMPOSE_CMD) up -d --build auth-service diary-service realtime-service api-gateway waf
 
 vault-dev: vault-bootstrap
