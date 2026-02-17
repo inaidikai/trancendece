@@ -795,7 +795,7 @@ export default function FlipBook({
     : [];
   const hasFriendshipBlockers =
     entryDiaryType === DIARY_TYPE_COLLABORATIVE && !isOwner && friendshipBlockers.length > 0;
-  const canEditEntry = (entryRole === "owner" || entryRole === "editor") && !hasFriendshipBlockers;
+  const canEditEntry = (entryRole === "owner" || entryRole === "editor" || entryRole === "viewer") && !hasFriendshipBlockers;
   const canUseCollaborationUi = entryDiaryType === DIARY_TYPE_COLLABORATIVE;
   const [remotePresence, setRemotePresence] = useState({});
   const presenceChannelRef = useRef(null);

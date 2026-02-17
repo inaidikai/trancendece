@@ -21,6 +21,7 @@ const devHost = process.env.VITE_DEV_HOST || 'localhost';
 const wafHost = process.env.VITE_WAF_HOST || devHost;
 const wafPort = process.env.VITE_WAF_PORT || '8081';
 const wafProtocol = process.env.VITE_WAF_PROTOCOL || 'https';
+const wafTarget = `${wafProtocol}://${wafHost}:${wafPort}`;
 
 export default defineConfig({
   plugins: [react()],
@@ -36,12 +37,17 @@ export default defineConfig({
       : undefined,
     proxy: {
       '/api': {
-        target: `${wafProtocol}://${wafHost}:${wafPort}`,
+        target: wafTarget,
         changeOrigin: true,
         secure: wafProtocol === 'https' ? false : undefined,
         rewrite: (path) => path.replace(/^\/api/, ''),
       },
+      '/socket.io': {
+        target: wafTarget,
+        changeOrigin: true,
+        ws: true,
+        secure: wafProtocol === 'https' ? false : undefined,
+      },
     },
   },
-
 });

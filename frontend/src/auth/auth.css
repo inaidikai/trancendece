@@ -611,6 +611,50 @@
   gap: 12px;
 }
 
+.dashboard-action-modal {
+  width: min(440px, 92vw);
+}
+
+.dashboard-action-modal .dashboard-modal-title {
+  font-size: 28px;
+  line-height: 1.1;
+}
+
+.dashboard-action-copy {
+  margin: 0;
+  font-size: 14px;
+  color: rgba(35, 4, 1, 0.72);
+  line-height: 1.45;
+}
+
+.dashboard-action-input-row {
+  margin-bottom: 0;
+}
+
+.dashboard-action-input-row .auth-input-label {
+  font-size: 16px;
+}
+
+.dashboard-action-input-row .auth-input {
+  font-size: 16px;
+  padding: 12px 14px;
+}
+
+.dashboard-action-error {
+  margin-top: 2px;
+}
+
+.dashboard-action-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 2px;
+}
+
+.dashboard-action-footer .auth-button {
+  min-width: 116px;
+}
+
 .dashboard-section-title {
   font-size: 16px;
   margin: 10px 0 4px;

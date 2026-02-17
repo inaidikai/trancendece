@@ -230,7 +230,6 @@ async function canUserEditEntry(entryId, userId) {
              WHERE c.entry_id = e.id
                AND c.user_id = $2
                AND c.status = 'accepted'
-               AND c.role = 'editor'
            )
          )
        )
