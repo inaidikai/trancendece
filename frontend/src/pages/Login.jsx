@@ -1,6 +1,5 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { testSocket } from "../socketTest";
 
 export default function Login() {
   const nav = useNavigate();
@@ -37,7 +36,6 @@ export default function Login() {
               if (!res.ok) throw new Error("Login failed");
               const data = await res.json();
               localStorage.setItem("token", data.token);
-              testSocket(data.token);
               nav("/world");
             } catch (e) {
               console.error(e);

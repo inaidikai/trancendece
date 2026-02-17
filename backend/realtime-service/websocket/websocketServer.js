@@ -1,6 +1,6 @@
 const { Server } = require("socket.io");
 const authenticateSocket = require("../middleware/authenticateSocket");
-const registerLola = require("./registerlala");
+const registerLola = require("./registerLola");
 
 const DEFAULT_ALLOWED_ORIGINS = [
   "https://localhost:5173",

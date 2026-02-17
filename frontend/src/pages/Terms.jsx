@@ -19,7 +19,7 @@ export default function Terms() {
         <button className="policy-back" onClick={handleBack}>
           Back
         </button>
-        <h1>Terms and Conditions</h1>
+        <h1>Terms and Services</h1>
         <p className="privacy-updated">Last Updated: February 2026</p>
         <p>Welcome to Quillow. By using our app, you agree to these terms.</p>
 

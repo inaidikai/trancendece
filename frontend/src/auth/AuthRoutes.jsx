@@ -7,7 +7,7 @@ import ForgotPassword from "./pages/ForgotPassword";
 import ResetPassword from "./pages/ResetPassword";
 import Verify2FA from "./pages/Verify2FA";
 import CreateProfile from "./pages/CreateProfile";
-import DashboardPlaceholder from "./pages/DashboardPlaceholder";
+import Dashboard from "../pages/Dashboard";
 import { getToken } from "./authApi";
 
 const ROUTES = {
@@ -17,7 +17,7 @@ const ROUTES = {
   "reset-password": ResetPassword,
   "verify-2fa": Verify2FA,
   "create-profile": CreateProfile,
-  dashboard: DashboardPlaceholder,
+  dashboard: Dashboard,
 };
 
 export default function AuthRoutes({ initial = "login" }) {

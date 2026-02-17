@@ -19,7 +19,6 @@ import { Water } from "three-stdlib";
 import { useThree } from "@react-three/fiber";
 import * as THREE from "three";
 
-import DashboardPlaceholder from "../auth/pages/DashboardPlaceholder";
 import AuthButton from "../auth/components/AuthButton";
 import "../auth/auth.css";
 import "../auth/components/authComponents.css";
@@ -909,23 +908,6 @@ export default function World() {
   const [worldLoadState, setWorldLoadState] = useState({ active: true, progress: 0 });
   const [sceneReady, setSceneReady] = useState(false);
   const sceneReadyRef = useRef(false);
-  const dashboardNavigate = useCallback(
-    (target) => {
-      if (target === "login") {
-        nav("/login");
-        return;
-      }
-      if (target === "dashboard") {
-        nav("/world");
-        return;
-      }
-      if (target) {
-        nav(`/${target}`);
-      }
-    },
-    [nav]
-  );
-
   const [books, setBooks] = useState([{ id: "1", pos: [1, 1.0, 7] }]);
   const [prompt, setPrompt] = useState(null);
   const sceneLockRef = useRef(null);
@@ -1309,11 +1291,6 @@ export default function World() {
         />
       )}
 
-      <div className="dashboard-overlay">
-        <div className="auth-root">
-          <DashboardPlaceholder navigate={dashboardNavigate} />
-        </div>
-      </div>
     </div>
 
   );

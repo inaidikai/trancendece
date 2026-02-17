@@ -1,7 +1,5 @@
-// backend/realtime-service/websocket/registerlala.js
+// backend/realtime-service/websocket/registerLola.js
 
-const WS_EVENTS = require("./realtime/constants/wsEvents");
-const DIARY_SOCIAL_WS_EVENTS = require("./realtime/constants/diarySocialWsEvent");
 const DIARY_COLLAB_WS_EVENTS = require("./realtime/constants/diaryCollabWsEvents");
 
 // handlers (these are modules, not “registerX” functions)
@@ -49,7 +47,6 @@ module.exports = async function registerLola(io, socket) {
 
   // minimal baseline
   socket.emit("ready", { userId });
-  socket.on("ping", () => socket.emit("pong"));
 
   // (Optional but recommended) Presence “online”
   // Only call these if they exist in your presence module.

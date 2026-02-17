@@ -68,11 +68,11 @@ app.register(httpProxy, {
 });
 
 app.register(httpProxy, {
-  upstream: "http://user-service:8001",
+  upstream: "http://diary-service:8002",
   prefix: "/users",
 });
 app.register(httpProxy, {
-  upstream: "http://user-service:8001",
+  upstream: "http://diary-service:8002",
   prefix: "/api/users",
 });
 
