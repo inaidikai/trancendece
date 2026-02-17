@@ -1,3 +1,5 @@
+const fs = require('fs/promises');
+
 const DEFAULT_KV_PATHS = 'kv/data/app';
 
 function splitPaths(raw) {
@@ -28,15 +30,25 @@ async function fetchJson(url, headers) {
 async function loadVaultSecrets(options = {}) {
   const logger = options.logger || console;
   const addr = process.env.VAULT_ADDR;
-  const token = process.env.VAULT_TOKEN;
+  const tokenFromEnv = process.env.VAULT_TOKEN;
+  const tokenFilePath = process.env.VAULT_TOKEN_FILE;
+  let token = tokenFromEnv;
   const namespace = process.env.VAULT_NAMESPACE;
   const paths = splitPaths(process.env.VAULT_KV_PATHS || DEFAULT_KV_PATHS);
   const override = String(process.env.VAULT_OVERRIDE || '').toLowerCase() === 'true';
   const failFast = String(process.env.VAULT_FAIL_FAST || '').toLowerCase() === 'true';
 
+  if (!token && tokenFilePath) {
+    try {
+      token = (await fs.readFile(tokenFilePath, 'utf8')).trim();
+    } catch (err) {
+      logger.error(`Failed to read VAULT_TOKEN_FILE (${tokenFilePath}): ${err.message}`);
+    }
+  }
+
   if (!addr || !token) {
     logger.info('Vault not configured; skipping secret load.');
-    return { loaded: false, reason: 'missing VAULT_ADDR or VAULT_TOKEN' };
+    return { loaded: false, reason: 'missing VAULT_ADDR and/or token (VAULT_TOKEN or VAULT_TOKEN_FILE)' };
   }
 
   const headers = {

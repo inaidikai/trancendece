@@ -9,22 +9,23 @@ CERT_CRT := $(CERT_DIR)/quillow.local.crt
 CERT_CONF := $(CERT_DIR)/openssl-local.cnf
 NPM_DIRS := . frontend infrastructure backend/auth-service backend/user-service backend/diary-service backend/realtime-service backend/api-gateway
 
-.PHONY: all help make-start check-tools npm-self-update npm-install up down vault-seed dev fclean certs
+.PHONY: all help make-start check-tools npm-self-update npm-install up down vault-bootstrap-prod vault-seed dev fclean certs
 
 all: make-start
 
 help:
 	@echo "Targets:"
-	@echo "  make / make-start : update npm, install deps, start docker compose, run frontend dev server"
+	@echo "  make / make-start : install deps, bootstrap production-style Vault, start all services, run frontend dev server"
 	@echo "  certs             : create local HTTPS cert/key if missing"
 	@echo "  up                : docker compose up -d --build"
 	@echo "  down              : docker compose down --remove-orphans"
-	@echo "  vault-seed        : seed Vault KV from .env (dev mode)"
+	@echo "  vault-bootstrap-prod : init/unseal Vault, apply policy, mint app token, seed kv"
+	@echo "  vault-seed        : seed Vault KV from .env using root token in local init file"
 	@echo "  fclean            : alias of down"
 	@echo "  npm-install       : npm install in all package folders"
 	@echo "  npm-self-update   : try updating npm CLI globally"
 
-make-start: check-tools certs npm-self-update npm-install up vault-seed dev
+make-start: check-tools certs npm-self-update npm-install vault-bootstrap-prod up dev
 
 check-tools:
 	@command -v docker >/dev/null || { echo "docker is required"; exit 1; }
@@ -76,9 +77,15 @@ down:
 	@echo "Stopping docker compose services..."
 	@cd $(COMPOSE_DIR) && $(COMPOSE_CMD) down --remove-orphans
 
+vault-bootstrap-prod:
+	@echo "Bootstrapping Vault (production mode)..."
+	@mkdir -p infrastructure/runtime
+	@VAULT_AUTO_RECOVER=true bash infrastructure/vault/bootstrap-local-prod.sh
+
 vault-seed:
-	@echo "Seeding Vault KV..."
-	@VAULT_ADDR=http://localhost:8200 VAULT_TOKEN=$${VAULT_TOKEN:-my-secret-token} \
+	@echo "Seeding Vault KV with stored root token..."
+	@VAULT_ADDR=http://localhost:8200 \
+	VAULT_TOKEN=$$(node -e "const fs=require('fs');const f='infrastructure/vault/.local-init.json';if(!fs.existsSync(f)){process.exit(1)}const d=JSON.parse(fs.readFileSync(f,'utf8'));process.stdout.write(d.root_token||'')") \
 		sh infrastructure/vault/seed.sh
 
 dev:

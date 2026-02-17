@@ -1,13 +1,24 @@
 #!/usr/bin/env sh
 set -eu
 
+SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
+PROJECT_ROOT=$(cd "$SCRIPT_DIR/../.." && pwd)
+ENV_FILE=${ENV_FILE:-"$PROJECT_ROOT/.env"}
+
+if [ -f "$ENV_FILE" ]; then
+  set -a
+  # shellcheck disable=SC1090
+  . "$ENV_FILE"
+  set +a
+fi
+
 VAULT_ADDR=${VAULT_ADDR:-http://vault:8200}
 VAULT_TOKEN=${VAULT_TOKEN:-my-secret-token}
 VAULT_KV_PATH=${VAULT_KV_PATH:-kv/data/app}
 
 wait_for_vault() {
   for i in $(seq 1 30); do
-    if curl -s "$VAULT_ADDR/v1/sys/health" >/dev/null; then
+    if curl -fsS "$VAULT_ADDR/v1/sys/health" >/dev/null; then
       return 0
     fi
     sleep 1
@@ -21,8 +32,8 @@ enable_kv_v2() {
     -H "X-Vault-Token: $VAULT_TOKEN" \
     "$VAULT_ADDR/v1/sys/mounts/kv")
 
-  if [ "$status" = "404" ]; then
-    curl -sS -H "X-Vault-Token: $VAULT_TOKEN" \
+  if [ "$status" != "200" ]; then
+    curl -fsS -H "X-Vault-Token: $VAULT_TOKEN" \
       -H "Content-Type: application/json" \
       -X POST \
       -d '{"type":"kv","options":{"version":"2"}}' \
@@ -31,46 +42,29 @@ enable_kv_v2() {
 }
 
 build_payload() {
-  JWT_SECRET=${JWT_SECRET:-dev-super-secret-change-me}
-  FRONTEND_URL=${FRONTEND_URL:-https://localhost:5173}
-  GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-your-client-id-here}
-  GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-your-client-secret-here}
-  GOOGLE_REDIRECT_URI=${GOOGLE_REDIRECT_URI:-https://localhost:8081/auth/google/callback}
-  EMAIL_HOST=${EMAIL_HOST:-smtp.gmail.com}
-  EMAIL_PORT=${EMAIL_PORT:-587}
-  EMAIL_SECURE=${EMAIL_SECURE:-false}
-  EMAIL_USER=${EMAIL_USER:-your-email@gmail.com}
-  EMAIL_PASSWORD=${EMAIL_PASSWORD:-your-app-password}
-  EMAIL_FROM=${EMAIL_FROM:-${EMAIL_USER}}
-  PGHOST=${PGHOST:-postgres}
-  PGPORT=${PGPORT:-5432}
-  PGUSER=${PGUSER:-postgres}
-  PGPASSWORD=${PGPASSWORD:-postgres}
-  PGDATABASE=${PGDATABASE:-auth_db}
-  CORS_ORIGINS=${CORS_ORIGINS:-https://localhost:5173,https://127.0.0.1:5173}
-
-  cat <<JSON
-{
-  "data": {
-    "JWT_SECRET": "${JWT_SECRET}",
-    "FRONTEND_URL": "${FRONTEND_URL}",
-    "GOOGLE_CLIENT_ID": "${GOOGLE_CLIENT_ID}",
-    "GOOGLE_CLIENT_SECRET": "${GOOGLE_CLIENT_SECRET}",
-    "GOOGLE_REDIRECT_URI": "${GOOGLE_REDIRECT_URI}",
-    "EMAIL_HOST": "${EMAIL_HOST}",
-    "EMAIL_PORT": "${EMAIL_PORT}",
-    "EMAIL_SECURE": "${EMAIL_SECURE}",
-    "EMAIL_USER": "${EMAIL_USER}",
-    "EMAIL_PASSWORD": "${EMAIL_PASSWORD}",
-    "EMAIL_FROM": "${EMAIL_FROM}",
-    "PGHOST": "${PGHOST}",
-    "PGPORT": "${PGPORT}",
-    "PGUSER": "${PGUSER}",
-    "PGPASSWORD": "${PGPASSWORD}",
-    "PGDATABASE": "${PGDATABASE}",
-    "CORS_ORIGINS": "${CORS_ORIGINS}"
-  }
-}
+  node <<'JSON'
+const payload = {
+  data: {
+    JWT_SECRET: process.env.JWT_SECRET || "dev-super-secret-change-me",
+    FRONTEND_URL: process.env.FRONTEND_URL || "https://localhost:5173",
+    GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID || "your-client-id-here",
+    GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET || "your-client-secret-here",
+    GOOGLE_REDIRECT_URI: process.env.GOOGLE_REDIRECT_URI || "https://localhost:8081/auth/google/callback",
+    EMAIL_HOST: process.env.EMAIL_HOST || "smtp.gmail.com",
+    EMAIL_PORT: process.env.EMAIL_PORT || "587",
+    EMAIL_SECURE: process.env.EMAIL_SECURE || "false",
+    EMAIL_USER: process.env.EMAIL_USER || "your-email@gmail.com",
+    EMAIL_PASSWORD: process.env.EMAIL_PASSWORD || "your-app-password",
+    EMAIL_FROM: process.env.EMAIL_FROM || process.env.EMAIL_USER || "your-email@gmail.com",
+    PGHOST: process.env.PGHOST || "postgres",
+    PGPORT: process.env.PGPORT || "5432",
+    PGUSER: process.env.PGUSER || "postgres",
+    PGPASSWORD: process.env.PGPASSWORD || "postgres",
+    PGDATABASE: process.env.PGDATABASE || "auth_db",
+    CORS_ORIGINS: process.env.CORS_ORIGINS || "https://localhost:5173,https://127.0.0.1:5173",
+  },
+};
+process.stdout.write(JSON.stringify(payload));
 JSON
 }
 
@@ -79,7 +73,7 @@ enable_kv_v2
 
 payload=$(build_payload)
 
-curl -sS -H "X-Vault-Token: $VAULT_TOKEN" \
+curl -fsS -H "X-Vault-Token: $VAULT_TOKEN" \
   -H "Content-Type: application/json" \
   -X POST \
   -d "$payload" \

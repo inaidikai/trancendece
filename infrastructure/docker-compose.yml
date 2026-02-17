@@ -21,8 +21,11 @@ services:
       - VAULT_ADDR=http://vault:8200
       - VAULT_KV_PATHS=kv/data/app
       - VAULT_OVERRIDE=true
+      - VAULT_TOKEN_FILE=/vault/shared/app-token
     expose:
       - "8000"
+    volumes:
+      - ./runtime/app-token:/vault/shared/app-token:ro
     networks:
       - internal
     depends_on:
@@ -44,8 +47,11 @@ services:
       - VAULT_ADDR=http://vault:8200
       - VAULT_KV_PATHS=kv/data/app
       - VAULT_OVERRIDE=true
+      - VAULT_TOKEN_FILE=/vault/shared/app-token
     expose:
       - "8002"
+    volumes:
+      - ./runtime/app-token:/vault/shared/app-token:ro
     networks:
       - internal
     depends_on:
@@ -64,8 +70,11 @@ services:
       - VAULT_ADDR=http://vault:8200
       - VAULT_KV_PATHS=kv/data/app
       - VAULT_OVERRIDE=true
+      - VAULT_TOKEN_FILE=/vault/shared/app-token
     expose:
       - "8003"
+    volumes:
+      - ./runtime/app-token:/vault/shared/app-token:ro
     networks:
       - internal
     depends_on:
@@ -88,8 +97,11 @@ services:
       - VAULT_ADDR=http://vault:8200
       - VAULT_KV_PATHS=kv/data/app
       - VAULT_OVERRIDE=true
+      - VAULT_TOKEN_FILE=/vault/shared/app-token
     ports:
       - "8080:8080"
+    volumes:
+      - ./runtime/app-token:/vault/shared/app-token:ro
     networks:
       - internal
 
@@ -124,8 +136,7 @@ services:
   vault:
     image: hashicorp/vault:1.15
     container_name: security_vault
-    # Dev mode: unsealed, in-memory, single root token (do not use for production)
-    command: ["vault", "server", "-dev", "-dev-listen-address=0.0.0.0:8200", "-dev-root-token-id=${VAULT_TOKEN:-my-secret-token}"]
+    command: ["vault", "server", "-config=/vault/config/config.hcl"]
     ports:
       - "8200:8200"
     environment:
@@ -134,11 +145,14 @@ services:
     cap_add:
       - IPC_LOCK
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8200/v1/sys/health >/dev/null 2>&1 || exit 1"]
+      test: ["CMD-SHELL", "VAULT_ADDR=http://127.0.0.1:8200 vault status >/dev/null 2>&1; code=$$?; [ $$code -eq 0 ] || [ $$code -eq 1 ] || [ $$code -eq 2 ]"]
       interval: 10s
       timeout: 3s
       retries: 10
       start_period: 20s
+    volumes:
+      - ./vault/config.hcl:/vault/config/config.hcl:ro
+      - vault-data:/vault/file
     networks:
       - internal
 
