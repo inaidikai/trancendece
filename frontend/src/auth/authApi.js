@@ -41,7 +41,7 @@ export function clearToken() {
   });
 }
 
-async function apiRequest(path, { method = "POST", body, headers, auth } = {}) {
+async function apiRequest(path, { method = "POST", body, headers, auth, skipGlobal401Redirect } = {}) {
   const config = {
     method,
     headers: {
@@ -73,7 +73,8 @@ async function apiRequest(path, { method = "POST", body, headers, auth } = {}) {
   }
 if (!res.ok) {
     // Global 401 handler - token expired or invalid
-    if (res.status === 401) {
+    // Skip redirect for requests where 401 is expected (wrong password, wrong 2FA code, etc.)
+    if (res.status === 401 && !skipGlobal401Redirect) {
       clearToken();
       // Redirect to login page
       if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/auth')) {
@@ -111,6 +112,7 @@ async function requestWithFallback(paths, options) {
 export function login({ email, password }) {
   return apiRequest("/auth/login", {
     body: { email, password },
+    skipGlobal401Redirect: true,
   });
 }
 
@@ -137,7 +139,7 @@ export function resetPassword({ token, password }) {
 export function verify2FA({ user_id, code, temp_token }) {
   return requestWithFallback(
     ["/auth/verify-2fa-login", "/auth/verify-2fa"],
-    { body: { user_id, code, temp_token, tempToken: temp_token } }
+    { body: { user_id, code, temp_token, tempToken: temp_token }, skipGlobal401Redirect: true }
   );
 }
 
@@ -158,7 +160,7 @@ export function enable2FA() {
 export function disable2FA({ password }) {
   return requestWithFallback(
     ["/auth/2fa/disable"],
-    { auth: true, body: { password } }
+    { auth: true, body: { password }, skipGlobal401Redirect: true }
   );
 }
 

@@ -621,38 +621,41 @@
 }
 
 .dashboard-action-copy {
-  margin: 0;
+  margin: 2px 0 4px;
   font-size: 14px;
   color: rgba(35, 4, 1, 0.72);
   line-height: 1.45;
 }
 
 .dashboard-action-input-row {
-  margin-bottom: 0;
+  margin: 2px 0 0;
 }
 
 .dashboard-action-input-row .auth-input-label {
-  font-size: 16px;
+  font-size: 15px;
 }
 
 .dashboard-action-input-row .auth-input {
-  font-size: 16px;
-  padding: 12px 14px;
+  font-size: 15px;
+  padding: 10px 12px;
 }
 
 .dashboard-action-error {
-  margin-top: 2px;
+  margin-top: -2px;
 }
 
 .dashboard-action-footer {
   display: flex;
   justify-content: flex-end;
-  gap: 10px;
-  margin-top: 2px;
+  gap: 8px;
+  margin-top: 6px;
 }
 
 .dashboard-action-footer .auth-button {
-  min-width: 116px;
+  min-width: 92px;
+  padding: 8px 12px;
+  font-size: 14px;
+  border-radius: 10px;
 }
 
 .dashboard-section-title {

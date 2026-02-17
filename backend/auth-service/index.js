@@ -2,6 +2,7 @@ const fastify = require("fastify")({ logger: true });
 const jwt = require("@fastify/jwt");
 const fastifyExpress = require("@fastify/express");
 const express = require("express");
+const cookieParser = require("cookie-parser");
 let db;
 let authRoutes;
 let userRoutes;
@@ -116,6 +117,7 @@ const start = async () => {
 
     await fastify.register(fastifyExpress);
     fastify.use(express.json());
+    fastify.use(cookieParser());
     fastify.use(authRoutes);
     fastify.use("/users", userRoutes);
     await waitForDatabaseReady(DB_RETRY_ATTEMPTS, DB_RETRY_DELAY_MS);

@@ -29,7 +29,6 @@ router.get('/user/:id', authController.getUserById);
 router.get('/me', authMiddleware, authController.getMe);
 router.post('/logout', authMiddleware, authController.logout);
 router.post('/link-google', authMiddleware, authController.linkGoogleAccount);
-router.patch('/profile', authMiddleware, userController.updateProfile);
 
 // Protected 2FA management routes
 router.post('/2fa/enable', authMiddleware, twoFAController.enable2FA);

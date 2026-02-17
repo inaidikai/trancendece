@@ -17,7 +17,6 @@ pool.on('error', (err) => {
   console.error('PostgreSQL pool error', err);
 });
 
-// Helper wrapper methods for database operations
 const run = (text, params, callback) => {
   const args = Array.isArray(params) ? params : [];
   const cb = typeof params === 'function' ? params : callback;

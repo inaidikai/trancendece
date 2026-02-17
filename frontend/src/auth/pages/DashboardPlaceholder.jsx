@@ -14,6 +14,22 @@ const defaultCurrentUser = {
 
 const initialFriends = [];
 const initialNotifications = [];
+
+const defaultActionModalState = {
+  isOpen: false,
+  type: "",
+  title: "",
+  subtitle: "",
+  message: "",
+  confirmLabel: "Confirm",
+  cancelLabel: "Cancel",
+  requiresPassword: false,
+  password: "",
+  error: "",
+  isBusy: false,
+  friend: null,
+};
+
 const API_BASE = (import.meta.env?.VITE_API_URL || "/api").replace(/\/$/, "");
 const FRIEND_REQUEST_TOAST_MS = 30000;
 
@@ -637,6 +653,81 @@ function CustomizeProfileModal({
   );
 }
 
+function DashboardActionModal({
+  isOpen,
+  title,
+  subtitle,
+  message,
+  confirmLabel,
+  cancelLabel,
+  requiresPassword,
+  password,
+  error,
+  isBusy,
+  onPasswordChange,
+  onCancel,
+  onConfirm,
+}) {
+  if (!isOpen) return null;
+
+  return (
+    <div
+      className="dashboard-modal-backdrop"
+      onClick={() => {
+        if (!isBusy) onCancel();
+      }}
+    >
+      <div className="dashboard-modal dashboard-action-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="dashboard-modal-header">
+          <div>
+            <h2 className="dashboard-modal-title">{title}</h2>
+            {subtitle ? <p className="dashboard-modal-subtitle">{subtitle}</p> : null}
+          </div>
+          <button className="dashboard-close" onClick={onCancel} disabled={isBusy}>
+            ✕
+          </button>
+        </div>
+
+        <div className="dashboard-modal-content">
+          {message ? <p className="dashboard-action-copy">{message}</p> : null}
+
+          {requiresPassword ? (
+            <div className="auth-input-group dashboard-action-input-row">
+              <label className="auth-input-label">Password</label>
+              <input
+                className={"auth-input" + (error ? " error" : "")}
+                type="password"
+                value={password}
+                placeholder="Enter your password"
+                onChange={(e) => onPasswordChange(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    onConfirm();
+                  }
+                }}
+                autoFocus
+                disabled={isBusy}
+              />
+            </div>
+          ) : null}
+
+          {error ? <div className="auth-input-help dashboard-action-error">{error}</div> : null}
+
+          <div className="dashboard-action-footer">
+            <AuthButton variant="secondary" onClick={onCancel} disabled={isBusy}>
+              {cancelLabel || "Cancel"}
+            </AuthButton>
+            <AuthButton onClick={onConfirm} disabled={isBusy}>
+              {isBusy ? "Processing..." : confirmLabel || "Confirm"}
+            </AuthButton>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function FriendRequestToast({ request, onAccept, onDecline }) {
   if (!request) return null;
   return (
@@ -685,6 +776,7 @@ export default function DashboardPlaceholder({ navigate }) {
   const [inviteActionResultById, setInviteActionResultById] = useState({});
   const [friendActionBusyById, setFriendActionBusyById] = useState({});
   const [friendActionResultById, setFriendActionResultById] = useState({});
+  const [actionModal, setActionModal] = useState(defaultActionModalState);
   const profileWrapperRef = useRef(null);
   const profileMenuRef = useRef(null);
   const notificationsWrapperRef = useRef(null);
@@ -1059,13 +1151,14 @@ export default function DashboardPlaceholder({ navigate }) {
   }, [notificationsOpen]);
 
   useEffect(() => {
-    if (!(friendsOpen || notificationsOpen || profileOpen || profileModalOpen)) return;
+    if (!(friendsOpen || notificationsOpen || profileOpen || profileModalOpen || actionModal.isOpen)) return;
     releasePointerLockForUi();
   }, [
     friendsOpen,
     notificationsOpen,
     profileOpen,
     profileModalOpen,
+    actionModal.isOpen,
     releasePointerLockForUi,
   ]);
 
@@ -1077,6 +1170,127 @@ export default function DashboardPlaceholder({ navigate }) {
       }
     };
   }, []);
+
+  const closeActionModal = useCallback(() => {
+    setActionModal(defaultActionModalState);
+  }, []);
+
+  const openRemoveFriendModal = useCallback((friend) => {
+    if (!friend) return;
+    const removeLabel =
+      friend.status === "pending"
+        ? friend.direction === "received"
+          ? "Decline"
+          : "Cancel request"
+        : "Remove";
+
+    const message =
+      friend.status === "pending"
+        ? friend.direction === "received"
+          ? "Decline friend request from " + friend.name + "?"
+          : "Cancel friend request to " + friend.name + "?"
+        : "Remove " + friend.name + " from your friend list?";
+
+    setActionModal({
+      isOpen: true,
+      type: "remove_friend",
+      title: "Update friend list",
+      subtitle: "Confirm this action",
+      message,
+      confirmLabel: removeLabel,
+      cancelLabel: "Keep",
+      requiresPassword: false,
+      password: "",
+      error: "",
+      isBusy: false,
+      friend,
+    });
+  }, []);
+
+  const handleActionModalPasswordChange = useCallback((value) => {
+    setActionModal((prev) => ({ ...prev, password: value, error: "" }));
+  }, []);
+
+  const handleConfirmActionModal = useCallback(async () => {
+    if (!actionModal.isOpen || actionModal.isBusy) return;
+
+    if (actionModal.type === "remove_friend") {
+      const friend = actionModal.friend;
+      if (!friend) {
+        closeActionModal();
+        return;
+      }
+
+      setActionModal((prev) => ({ ...prev, isBusy: true, error: "" }));
+      try {
+        if (friend.status === "pending" && friend.requestId) {
+          if (friend.direction === "received") {
+            await diaryRequest(
+              "/api/friends/decline?requestId=" + encodeURIComponent(friend.requestId),
+              { method: "POST" }
+            );
+          } else {
+            await diaryRequest("/api/friends/request/" + friend.requestId + "/cancel", {
+              method: "POST",
+            });
+          }
+        } else {
+          await diaryRequest("/api/friends/remove/" + friend.id, {
+            method: "POST",
+          });
+        }
+        await loadFriendsData();
+        closeActionModal();
+      } catch (error) {
+        setActionModal((prev) => ({
+          ...prev,
+          isBusy: false,
+          error: error?.message || "Failed to update friend list",
+        }));
+      }
+      return;
+    }
+
+    if (actionModal.type === "disable_2fa") {
+      const password = actionModal.password.trim();
+      if (!password) {
+        setActionModal((prev) => ({
+          ...prev,
+          error: "Password is required to disable 2FA.",
+        }));
+        return;
+      }
+
+      setActionModal((prev) => ({ ...prev, isBusy: true, error: "" }));
+      try {
+        await disable2FA({ password });
+        setTwoFAEnabled(false);
+        closeActionModal();
+      } catch (error) {
+        setActionModal((prev) => ({
+          ...prev,
+          isBusy: false,
+          error: error?.message || "Failed to disable 2FA",
+        }));
+      }
+      return;
+    }
+
+    if (actionModal.type === "enable_2fa") {
+      setActionModal((prev) => ({ ...prev, isBusy: true, error: "" }));
+      try {
+        await enable2FA();
+        setTwoFAEnabled(true);
+        closeActionModal();
+      } catch (error) {
+        setActionModal((prev) => ({
+          ...prev,
+          isBusy: false,
+          error: error?.message || "Failed to enable 2FA",
+        }));
+      }
+    }
+  }, [actionModal, closeActionModal, loadFriendsData]);
 
   const handleInvite = async () => {
     const username = inviteUsername.trim();
@@ -1094,33 +1308,6 @@ export default function DashboardPlaceholder({ navigate }) {
       await loadFriendsData();
     } catch (error) {
       setInviteError(error?.message || "Failed to send invite");
-    }
-  };
-
-  const handleRemoveFriend = async (friend) => {
-    if (!window.confirm(`Remove ${friend.name}?`)) return;
-    try {
-      if (friend.status === "pending" && friend.requestId) {
-        if (friend.direction === "received") {
-          await diaryRequest(
-            `/api/friends/decline?requestId=${encodeURIComponent(friend.requestId)}`,
-            {
-            method: "POST",
-            }
-          );
-        } else {
-          await diaryRequest(`/api/friends/request/${friend.requestId}/cancel`, {
-            method: "POST",
-          });
-        }
-      } else {
-        await diaryRequest(`/api/friends/remove/${friend.id}`, {
-          method: "POST",
-        });
-      }
-      await loadFriendsData();
-    } catch (error) {
-      setInviteError(error?.message || "Failed to update friend list");
     }
   };
 
@@ -1270,26 +1457,39 @@ export default function DashboardPlaceholder({ navigate }) {
     setProfileBio(words.slice(0, 50).join(" ") + " ");
   };
 
-  const handleToggle2FA = async () => {
-    try {
-      if (twoFAEnabled) {
-        const password = window.prompt("Enter your password to disable 2FA");
-        if (password === null) return;
-        if (!password.trim()) {
-          window.alert("Password is required to disable 2FA.");
-          return;
-        }
-        await disable2FA({ password: password.trim() });
-        setTwoFAEnabled(false);
-        window.alert("2FA disabled.");
-      } else {
-        await enable2FA();
-        setTwoFAEnabled(true);
-        window.alert("2FA enabled. You will get a code by email on next login.");
-      }
-    } catch (error) {
-      window.alert(error?.message || "Failed to update 2FA setting");
+  const handleToggle2FA = () => {
+    if (twoFAEnabled) {
+      setActionModal({
+        isOpen: true,
+        type: "disable_2fa",
+        title: "Disable two-factor authentication",
+        subtitle: "Confirm your password",
+        message: "Enter your password to disable 2FA.",
+        confirmLabel: "Disable",
+        cancelLabel: "Cancel",
+        requiresPassword: true,
+        password: "",
+        error: "",
+        isBusy: false,
+        friend: null,
+      });
+      return;
     }
+
+    setActionModal({
+      isOpen: true,
+      type: "enable_2fa",
+      title: "Enable two-factor authentication",
+      subtitle: "Security update",
+      message: "Enable 2FA now? You will receive a verification code by email on next login.",
+      confirmLabel: "Enable",
+      cancelLabel: "Cancel",
+      requiresPassword: false,
+      password: "",
+      error: "",
+      isBusy: false,
+      friend: null,
+    });
   };
 
   const handleLogout = () => {
@@ -1563,7 +1763,7 @@ export default function DashboardPlaceholder({ navigate }) {
         isOpen={friendsOpen}
         onClose={() => setFriendsOpen(false)}
         friends={friends}
-        onRemove={handleRemoveFriend}
+        onRemove={openRemoveFriendModal}
         onAccept={handleAcceptRequest}
         onDecline={handleDeclineRequest}
         onInvite={handleInvite}
@@ -1580,6 +1780,22 @@ export default function DashboardPlaceholder({ navigate }) {
         request={toastRequest}
         onAccept={handleAcceptRequest}
         onDecline={handleDeclineRequest}
+      />
+
+      <DashboardActionModal
+        isOpen={actionModal.isOpen}
+        title={actionModal.title}
+        subtitle={actionModal.subtitle}
+        message={actionModal.message}
+        confirmLabel={actionModal.confirmLabel}
+        cancelLabel={actionModal.cancelLabel}
+        requiresPassword={actionModal.requiresPassword}
+        password={actionModal.password}
+        error={actionModal.error}
+        isBusy={actionModal.isBusy}
+        onPasswordChange={handleActionModalPasswordChange}
+        onCancel={closeActionModal}
+        onConfirm={handleConfirmActionModal}
       />
 
       <CustomizeProfileModal

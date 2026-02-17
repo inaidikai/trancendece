@@ -269,7 +269,7 @@ WAF (Socket.IO)  →  realtime-service
 ---
 
 <details>
-<summary><strong>🔐 fkuruthl</strong> — Tech Lead (Auth/Integration) · Full-stack Developer</summary>
+<summary><strong>🔐 fkuruthl</strong> — PM · Tech Lead (Auth/Integration) · Full-stack Developer</summary>
 
 <br>
 
@@ -277,6 +277,7 @@ WAF (Socket.IO)  →  realtime-service
 
 | Area | Responsibility |
 |:---|:---|
+| 📋 Project Management | Sprint planning, task tracking, team coordination, backlog management |
 | 🔐 Auth Security | Rate limiting, password policy, 2FA implementation |
 | 🔑 Password Management | Bcrypt hashing + salting, password reset flows, policy validation |
 | 📧 2FA System | Code generation, expiry, recovery codes, email delivery |
@@ -284,6 +285,13 @@ WAF (Socket.IO)  →  realtime-service
 | 📚 Documentation | README, technical guides, validation reports |
 
 #### 🧰 Stack & Implementations
+
+**Project Management**
+- Sprint planning, task breakdown, and team coordination using **Jira** for issue tracking and sprint boards
+- **Notion** for documentation, runbooks, and knowledge base management
+- Backlog prioritization and roadmap planning
+- Regular standup facilitation and blockers tracking
+- Cross-functional team synchronization across auth, backend, and frontend domains
 
 **Auth Security & Rate Limiting**
 - In-memory rate limiter for auth endpoints:
@@ -314,12 +322,19 @@ WAF (Socket.IO)  →  realtime-service
 
 #### 📦 Technical Deliverables
 
-- Rate limiting across all auth endpoints with sliding window algorithm
-- Password policy enforcement at both frontend and backend
-- Complete 2FA lifecycle: enable → verify → disable + recovery codes
-- Secure password reset with token expiry and email validation
-- Duplicate user detection with specific error differentiation
-- Cross-service auth/security coordination with inkahar
+- **Project Management:**
+  - Jira sprint board setup and issue lifecycle management (backlog → todo → in-progress → review → done)
+  - Notion workspace with runbooks, decision logs, and technical documentation
+  - Sprint retrospectives and process improvements
+  - Stakeholder communication and progress tracking
+  
+- **Auth Implementation:**
+  - Rate limiting across all auth endpoints with sliding window algorithm
+  - Password policy enforcement at both frontend and backend
+  - Complete 2FA lifecycle: enable → verify → disable + recovery codes
+  - Secure password reset with token expiry and email validation
+  - Duplicate user detection with specific error differentiation
+  - Cross-service auth/security coordination with inkahar
 
 #### ⚡ Engineering Challenges Solved
 
