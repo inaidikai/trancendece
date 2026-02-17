@@ -49,6 +49,7 @@ Quillow is a secure, social, and collaborative diary platform. Users can registe
 **Work organization:**
 - Split by domain ownership: frontend UX, backend services, and infrastructure/security
 - Features delivered in short cycles with integration checkpoints to prevent service drift
+- Figma (UI wireframes, design system alignment, prototyping and user-flow planning)
 - Recurring standups and merge-review checkpoints for team sync
 
 **Tools:**
@@ -56,6 +57,15 @@ Quillow is a secure, social, and collaborative diary platform. Users can registe
 - WhatsApp + in-person lab syncs at 42 Abu Dhabi
 
 ---
+
+## 🧭 Frontend Product & UX Scope
+
+- Planned end-to-end user flows for auth, dashboard, read mode, and edit mode
+- Defined interaction states for diary tools (select/text/mic/upload/sticker), popups, and toolbars
+- Maintained visual consistency using shared color, spacing, radius, and typography patterns
+- Ran frontend testing for validation states, empty/error states, and responsive behavior (desktop/tablet/mobile)
+
+ --- 
 
 ## 🛠️ Technical Stack
 
@@ -251,6 +261,7 @@ WAF (Socket.IO)  →  realtime-service
 - Developed core frontend flows: auth screens, 3D world entry, flipbook/diary-facing UI paths
 - Implemented user-facing friend/collaboration interactions and form validation behavior
 - Contributed to diary and auth service integration from UI to API
+- Led frontend validation and usability testing (desktop/tablet/mobile), including auth edge cases and editor interaction checks
 - **Challenge:** Preserving UX consistency while supporting both standard and collaborative diary modes
 
 </details>
@@ -426,6 +437,7 @@ make fclean    # full clean — also removes generated certs
 - 42 ft_transcendence subject and campus correction guides
 - PostgreSQL docs: schema design, indexes, constraints, triggers
 - Fastify and Express official docs
+- Figma workspace (design boards, component specs, interaction prototypes)
 - Socket.IO docs: auth middleware, rooms, events
 - OWASP ModSecurity CRS docs
 - HashiCorp Vault docs (server mode, init/unseal, policy/token, KV v2)
