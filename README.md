@@ -1,3 +1,5 @@
+*This project has been created as part of the 42 curriculum by inkahar, aymohamm, fkuruthl, smuneer.*
+
 <div align="center">
 
 #  🐤 Quillow
@@ -260,10 +262,65 @@ WAF (Socket.IO)  →  realtime-service
 
 <br>
 
-- Contributed to auth and profile management flows, including integration and validation paths
-- Supported infra/security integration (Vault/WAF touchpoints) and service interoperability
-- Consolidated project documentation requirements and technical explanation assets
-- **Challenge:** Aligning auth/security behavior across multiple services while keeping local development setup reproducible
+#### 🗺️ Ownership Scope
+
+| Area | Responsibility |
+|:---|:---|
+| 🔐 Auth Security | Rate limiting, password policy, 2FA implementation |
+| 🔑 Password Management | Bcrypt hashing + salting, password reset flows, policy validation |
+| 📧 2FA System | Code generation, expiry, recovery codes, email delivery |
+| 🛡️ Security Hardening | Input validation, error handling, duplicate detection |
+| 📚 Documentation | README, technical guides, validation reports |
+
+#### 🧰 Stack & Implementations
+
+**Auth Security & Rate Limiting**
+- In-memory rate limiter for auth endpoints:
+  - `registerLimiter`: 5 registrations per 15 minutes
+  - `authLimiter`: 10 login attempts per 15 minutes
+  - `passwordResetLimiter`: 5 reset attempts per 30 minutes
+- Returns HTTP 429 with `retryAfter` header when exceeded
+- IP-based tracking with automatic window cleanup
+
+**Password Security**
+- `bcryptjs` with 10-round salting (industry standard)
+- Password policy validation (8+ chars, uppercase, lowercase, number, special char)
+- Frontend + backend validation (defense in depth)
+- Passwords hashed before DB storage, never logged or exposed
+
+**2FA Implementation**
+- Email-based OTP codes with 2-minute expiry
+- Recovery codes (8 per user) for account recovery
+- Bcrypt hashing for secure code storage
+- One-time use enforcement via `used_at` timestamp tracking
+- Resend functionality with rate limiting
+
+**Error Handling & Input Validation**
+- Case-insensitive email handling (prevents duplicate case variants)
+- Specific error messages for duplicate email/username (409 conflict)
+- Generic "Invalid email or password" on auth failure (prevents user enumeration)
+- Proper HTTP status codes: 400 (bad input), 401 (auth failure), 409 (conflict), 429 (rate limit)
+
+#### 📦 Technical Deliverables
+
+- Rate limiting across all auth endpoints with sliding window algorithm
+- Password policy enforcement at both frontend and backend
+- Complete 2FA lifecycle: enable → verify → disable + recovery codes
+- Secure password reset with token expiry and email validation
+- Duplicate user detection with specific error differentiation
+- Cross-service auth/security coordination with inkahar
+
+#### ⚡ Engineering Challenges Solved
+
+> **Rate limiting without persistence** — Needed to prevent brute force attacks during development without adding Redis. Solution: In-memory Map-based tracking with automatic window cleanup, sufficient for local/dev environments and easily swappable for Redis in production.
+
+> **2FA expiry precision** — 2FA codes must balance usability (enough time to receive email) with security (minimize exposure). Solution: 2-minute window with millisecond-precision timestamp comparison.
+
+> **Duplicate handling** — Database UNIQUE constraints return cryptic error codes. Solution: Parse constraint error messages to return specific 409 responses (email vs username conflicts) and display user-friendly messages.
+
+- Prevented timing attacks with bcryptjs constant-time comparison
+- Unified validation logic between frontend and backend (DRY principle)
+- Maintained backward compatibility while hardening security
 
 </details>
 
