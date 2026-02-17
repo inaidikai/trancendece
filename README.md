@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🪡 Quillow
+#  🐤 Quillow
 ### ft_transcendence — Quillow Diary App
 
 **A secure, social, and collaborative diary platform**
@@ -35,7 +35,7 @@ Quillow is a secure, social, and collaborative diary platform. Users can registe
 
 | Login | Role | Responsibilities |
 |:---|:---|:---|
-| `inkahar` | PM · Backend Lead · DevOps/Security | Service orchestration, API gateway, realtime architecture, infra hardening, integration direction |
+| `inkahar` | PM · Backend Lead · DevOps/Security | Service orchestration, API gateway, routing architecture, WAF/Vault hardening, 3D environment integration direction |
 | `aymohamm` | PO · Frontend Lead · Full-stack | UX/UI flows, core diary interaction screens, auth UX, user-facing validation and product alignment |
 | `fkuruthl` | Tech Lead (Auth/Integration) · Full-stack | Auth service integration, profile flows, testing support, cross-service coordination and documentation |
 | `smuneer` | Backend Developer (Diary & Realtime) | diary-service REST API, collaboration system with role-based permissions, real-time notification integration, WebSocket trigger endpoint, socket authentication |
@@ -59,25 +59,25 @@ Quillow is a secure, social, and collaborative diary platform. Users can registe
 
 ### Frontend
 - React 19, React Router 7, Vite (`rolldown-vite`), TailwindCSS
-- Three.js ecosystem: `@react-three/fiber`, `@react-three/drei`, `@react-three/rapier`
+- Three.js ecosystem: `three`, `@react-three/fiber`, `@react-three/drei`, `@react-three/rapier`
 
 ### Backend
-- Node.js microservices using Fastify and Express
+- Node.js microservices using Fastify/Express patterns with Socket.IO for realtime transport
 - `auth-service` · `diary-service` · `realtime-service` · `api-gateway`
 
 ### Database
 - **PostgreSQL 16** — chosen for relational integrity, strong indexing, transactional consistency, and natural fit for user/friend/collaboration relationships
 
 ### Security & Platform
-- OWASP ModSecurity CRS (WAF) · HashiCorp Vault (dev mode) · Docker Compose · OpenSSL TLS
+- OWASP ModSecurity CRS (WAF) · HashiCorp Vault (server mode, locally initialized/unsealed) · Docker Compose · OpenSSL TLS
 
 ### Key Architecture Decisions
 
 | Decision | Justification |
 |:---|:---|
-| Microservice split | Isolate auth, domain logic, realtime traffic, and gateway concerns |
+| Microservice split | Isolate auth/domain/realtime concerns and keep service contracts independently deployable |
 | PostgreSQL constraints/triggers | Enforce business rules at DB level, not only in API code |
-| WAF + Gateway + JWT + Vault | Layered security controls (defense-in-depth) |
+| WAF + Gateway + JWT + Vault | Layered security controls for HTTP APIs, with dedicated realtime proxy handling for Socket.IO transport |
 
 ---
 
@@ -134,7 +134,7 @@ erDiagram
 | User management REST API | Profile viewing, user search, friendship status | `smuneer`, `fkuruthl` |
 | Realtime notifications/presence | Socket-driven live notifications and online state | `smuneer`, `inkahar` |
 | WebSocket trigger integration | REST-to-WebSocket notification bridge for instant delivery | `smuneer`, `inkahar` |
-| 3D world experience | 3D scene entrypoint and interaction shell for diary access | `aymohamm` |
+| 3D world experience | 3D scene entrypoint, movement/interaction shell, and diary access bridge | `aymohamm`, `inkahar` |
 | API gateway routing | Unified edge routing for auth/diary/realtime services | `inkahar` |
 | WAF hardening | ModSecurity rules and targeted false-positive tuning | `inkahar`, `fkuruthl` |
 | Vault secret loading | Runtime secret injection for services | `inkahar`, `fkuruthl` |
@@ -157,7 +157,7 @@ erDiagram
 | User Management | 2FA system | Minor | 1 | `fkuruthl`, `inkahar` |
 | Artificial Intelligence | Voice/speech integration | Minor | 1 | `aymohamm` |
 | Cybersecurity | WAF/ModSecurity + HashiCorp Vault | Major | 2 | `inkahar`, `fkuruthl` |
-| Gaming and UX | Advanced 3D graphics (Three.js) | Major | 2 | `aymohamm` |
+| Gaming and UX | Advanced 3D graphics (Three.js) | Major | 2 | `aymohamm`, `inkahar` |
 | DevOps | Backend as microservices | Major | 2 | `inkahar` |
 
 ---
@@ -188,21 +188,28 @@ erDiagram
 **Microservices & Routing**
 - `api-gateway` — central edge router/proxy
 - `auth-service` · `diary-service` · `realtime-service`
-- HTTP proxy-based route forwarding and service isolation
+- HTTP proxy forwarding with dual prefixes (`/auth` + `/api/auth`, `/diary` + `/api/diary`) for compatibility
+- WebSocket proxy support at gateway (`/socket.io`, `/api/socket.io`) with upgrade handling
 - JWT-protected route forwarding and auth-aware gateway flows
 
 **Security & Hardening**
 - OWASP ModSecurity CRS (WAF) with route-level false-positive tuning
+- WAF routing profile:
+  - `/socket.io` proxied directly to realtime-service with WS upgrade support
+  - `/diary/api/entries` keeps WAF enabled with tuned body limit/rule suppressions for rich diary payloads
+  - `/auth/google/*` explicitly bypassed to avoid OAuth flow breakage
 - TLS local certificate setup via OpenSSL
 - Defense-in-depth path:
 ```
-WAF  →  Gateway  →  Service JWT/Auth  →  DB constraints
+WAF (HTTP)  →  Gateway  →  Service JWT/Auth  →  DB constraints
+WAF (Socket.IO)  →  realtime-service
 ```
 
 **Secret Management**
-- HashiCorp Vault (dev mode) — runtime secret loading into services
-- Vault seed flow from `.env`
-- Managed keys: `JWT_SECRET` · `VAULT_ADDR` · `VAULT_TOKEN` · `VAULT_KV_PATHS` · OAuth/email secrets
+- HashiCorp Vault server mode (not `-dev`) with local init/unseal flow (`key-shares=3`, `key-threshold=3`)
+- Policy-based app token generation and token-file injection (`VAULT_TOKEN_FILE=/vault/shared/app-token`)
+- Vault KV v2 seed flow from `.env` and runtime override loading (`VAULT_OVERRIDE=true`)
+- Managed keys: `JWT_SECRET` · `VAULT_ADDR` · `VAULT_TOKEN_FILE` · `VAULT_KV_PATHS` · OAuth/email secrets
 
 **Realtime / Infra Integration**
 - Cross-service Socket.IO delivery path support
@@ -345,7 +352,7 @@ cd frontend && npm run dev
 | Frontend | `https://localhost:5173` |
 | API Gateway | `http://localhost:8080` |
 | WAF HTTPS entry | `https://localhost:8081` |
-| Vault UI/API (dev) | `http://localhost:8200` |
+| Vault UI/API | `http://localhost:8200` |
 
 ### Stop & Clean
 
@@ -364,7 +371,7 @@ make fclean    # full clean — also removes generated certs
 - Fastify and Express official docs
 - Socket.IO docs: auth middleware, rooms, events
 - OWASP ModSecurity CRS docs
-- HashiCorp Vault docs (dev mode and KV usage)
+- HashiCorp Vault docs (server mode, init/unseal, policy/token, KV v2)
 - React, React Router, Vite, Three.js / React Three Fiber docs
 
 **AI usage in this project:**
@@ -376,7 +383,7 @@ make fclean    # full clean — also removes generated certs
 
 ## ⚠️ Known Limitations
 
-- Vault setup is **development mode only** (`-dev`) — not production-grade
+- Vault is not running with `-dev`; it runs in server mode, but still has local-only constraints (single-node file storage, local init material, and HTTP listener without TLS inside Docker network)
 - Local `.env` may include sensitive values — rotate and externalize for any shared or production environment
 - WAF tuning is optimized for this app's payload profile and may require recalibration if the API changes
 
