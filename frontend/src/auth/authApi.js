@@ -1,6 +1,8 @@
 const API_BASE = (import.meta.env?.VITE_API_URL || "/api").replace(/\/$/, "");
 const TOKEN_KEYS = ["authToken", "token"];
 
+// Get token from httpOnly cookie (read via JavaScript is not possible; rely on automatic cookie sending)
+// For explicit access, check localStorage as fallback
 export function getToken() {
   if (typeof window === "undefined") return null;
   for (const key of TOKEN_KEYS) {

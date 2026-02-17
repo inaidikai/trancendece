@@ -10,7 +10,7 @@ const {
 const { sendWelcomeEmail, sendTwoFAEmail } = require('../utils/emailService');
 const { loadVaultSecrets } = require('../../shared/vault');
 
-const TWO_FA_CODE_EXPIRY_MS = 10 * 60 * 1000;
+const TWO_FA_CODE_EXPIRY_MS = 2 * 60 * 1000;
 const OAUTH_STATE_TTL_MS = Number(process.env.OAUTH_STATE_TTL_MS || 10 * 60 * 1000);
 
 const ensureGoogleOAuthSecrets = async () => {
@@ -100,7 +100,14 @@ const register = (req, res) => {
     db.run(query, [userId, email.toLowerCase(), username, hashedPassword, full_name || null], function (err) {
       if (err) {
         console.error('Registration error:', err.message);
-        if (err.message.includes('UNIQUE')) {
+        const errMsg = err.message.toLowerCase();
+        if (errMsg.includes('unique') && errMsg.includes('email')) {
+          return res.status(409).json({ error: 'Email already in use' });
+        }
+        if (errMsg.includes('unique') && errMsg.includes('username')) {
+          return res.status(409).json({ error: 'Username already in use' });
+        }
+        if (errMsg.includes('unique')) {
           return res.status(409).json({ error: 'Email or username already exists' });
         }
         return res.status(500).json({ error: 'Database error', details: err.message });

@@ -159,7 +159,7 @@ const sendOAuthCodeEmail = async (email, code, userName) => {
       text: `Hi ${userName || email},
 
 Your OAuth verification code is: ${code}
-This code expires in 10 minutes.
+This code expires in 2 minutes.
 If you did not request this, ignore this email.
 
 Quillow Team`,
@@ -168,7 +168,7 @@ Quillow Team`,
         <p>Hi ${userName || email},</p>
         <p>Your verification code is:</p>
         <h1 style="color: #4CAF50; font-size: 32px; letter-spacing: 5px;">${code}</h1>
-        <p>This code expires in 10 minutes.</p>
+        <p>This code expires in 2 minutes.</p>
         <p>If you didn't request this code, please ignore this email.</p>
         <p>Best regards,<br/>Quillow Team</p>
       `,
@@ -191,7 +191,7 @@ const sendTwoFAEmail = async (email, code, userName) => {
       text: `Hi ${userName || email},
 
 Your 2FA code is: ${code}
-This code expires in 10 minutes.
+This code expires in 2 minutes.
 If you did not request this, ignore this email.
 
 Quillow Team`,
@@ -200,7 +200,7 @@ Quillow Team`,
         <p>Hi ${userName || email},</p>
         <p>Your 2FA verification code is:</p>
         <h1 style="color: #4CAF50; font-size: 40px; letter-spacing: 10px; font-weight: bold;">${code}</h1>
-        <p style="font-size: 16px; color: #666;">This code expires in 10 minutes.</p>
+        <p style="font-size: 16px; color: #666;">This code expires in 2 minutes.</p>
         <p>If you didn't request this code, please ignore this email.</p>
         <p>Best regards,<br/>Quillow Team</p>
       `,
