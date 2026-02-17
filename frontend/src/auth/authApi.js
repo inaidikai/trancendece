@@ -82,14 +82,10 @@ if (!res.ok) {
     }
 
     const serverMessage = data?.message || data?.error || "Request failed";
-    const safeMessage =
-      res.status >= 500
-        ? "Service temporarily unavailable. Please try again."
-        : serverMessage;
 
     throw {
       status: res.status,
-      message: safeMessage,
+      message: serverMessage,
       serverMessage,
     };
   }

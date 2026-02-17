@@ -34,7 +34,7 @@ const createRateLimiter = (maxRequests, windowMs) => {
 const registerLimiter = createRateLimiter(5, 15 * 60 * 1000);
 
 // 10 login attempts per 15 minutes
-const authLimiter = createRateLimiter(5, 15 * 60 * 1000);
+const authLimiter = createRateLimiter(10, 15 * 60 * 1000);
 
 // 5 password reset attempts per 30 minutes
 const passwordResetLimiter = createRateLimiter(5, 30 * 60 * 1000);
