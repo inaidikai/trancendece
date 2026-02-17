@@ -9,7 +9,7 @@ CERT_CRT := $(CERT_DIR)/quillow.local.crt
 CERT_CONF := $(CERT_DIR)/openssl-local.cnf
 NPM_DIRS := . frontend infrastructure backend/auth-service backend/user-service backend/diary-service backend/realtime-service backend/api-gateway
 
-.PHONY: all help make-start check-tools npm-self-update npm-install up down vault-bootstrap-prod vault-seed dev fclean certs
+.PHONY: all help make-start check-tools npm-self-update npm-install up down vault-bootstrap-prod vault-seed logs-clean logs-clean-follow dev fclean certs
 
 all: make-start
 
@@ -21,6 +21,8 @@ help:
 	@echo "  down              : docker compose down --remove-orphans"
 	@echo "  vault-bootstrap-prod : init/unseal Vault, apply policy, mint app token, seed kv"
 	@echo "  vault-seed        : seed Vault KV from .env using root token in local init file"
+	@echo "  logs-clean        : show only actionable error/status log lines (snapshot)"
+	@echo "  logs-clean-follow : same as logs-clean, but streaming"
 	@echo "  fclean            : alias of down"
 	@echo "  npm-install       : npm install in all package folders"
 	@echo "  npm-self-update   : try updating npm CLI globally"
@@ -87,6 +89,12 @@ vault-seed:
 	@VAULT_ADDR=http://localhost:8200 \
 	VAULT_TOKEN=$$(node -e "const fs=require('fs');const f='infrastructure/vault/.local-init.json';if(!fs.existsSync(f)){process.exit(1)}const d=JSON.parse(fs.readFileSync(f,'utf8'));process.stdout.write(d.root_token||'')") \
 		sh infrastructure/vault/seed.sh
+
+logs-clean:
+	@bash infrastructure/logs-clean.sh
+
+logs-clean-follow:
+	@FOLLOW=true bash infrastructure/logs-clean.sh
 
 dev:
 	@if lsof -ti :5173 >/dev/null 2>&1; then \

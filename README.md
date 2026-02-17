@@ -1,58 +1,87 @@
-This project has been created as part of the 42 curriculum by inaidikai, aymohamm, fkuruthl, smuneer.
+<div align="center">
 
-# Quillow - ft_transcendence (Surprise)
+# 🪡 Quillow
+### ft_transcendence — Quillow Diary App
 
-## Description
-Quillow is a secure, social, and collaborative diary platform built as a full-stack 42 project.  
-The goal is to provide a modern web application where users can register/login, manage friendships, create private or collaborative diary spaces, and interact in real time.
+**A secure, social, and collaborative diary platform**
+*Built as a full-stack 42 project by a team of four.*
 
-Key features:
-- Secure authentication with JWT, Google OAuth, password reset, and 2FA.
-- Friend system with requests, acceptance/decline flows, and presence-aware collaboration rules.
-- Diary management with private/collaborative modes and collaborator invitations.
-- Real-time updates over WebSocket (presence, collaboration, notifications).
-- Defense-in-depth runtime with API gateway, OWASP ModSecurity WAF, and Vault-backed secret loading.
+[![Node](https://img.shields.io/badge/Node.js-22.22.0-339933?style=flat-square&logo=node.js&logoColor=white)](https://nodejs.org/)
+[![React](https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react&logoColor=black)](https://react.dev/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?style=flat-square&logo=postgresql&logoColor=white)](https://www.postgresql.org/)
+[![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?style=flat-square&logo=docker&logoColor=white)](https://docs.docker.com/compose/)
+[![WAF](https://img.shields.io/badge/WAF-ModSecurity-red?style=flat-square&logo=owasp&logoColor=white)](https://owasp.org/www-project-modsecurity-core-rule-set/)
+[![Vault](https://img.shields.io/badge/Secrets-HashiCorp%20Vault-black?style=flat-square&logo=vault&logoColor=white)](https://www.vaultproject.io/)
 
-## Team Information
-| Login | Assigned role(s) | Responsibilities |
-|---|---|---|
-| inaidikai | PM, Backend Lead, DevOps/Security | Service orchestration, API gateway, realtime architecture, infra hardening, integration direction. |
-| aymohamm | PO, Frontend Lead, Full-stack Developer | UX/UI flows, core diary interaction screens, auth UX, user-facing validation and product alignment. |
-| fkuruthl | Tech Lead (Auth/Integration), Full-stack Developer | Auth service integration, profile flows, testing support, cross-service coordination and documentation. |
-| `smuneer` | Backend Developer (Diary & Realtime Services) | diary-service REST API implementation, collaboration system with role-based permissions, real-time notification integration, WebSocket trigger endpoint, and socket authentication. |
+</div>
 
-## Project Management
-Work organization:
-- Work was split by domain ownership: frontend UX, backend services, and infrastructure/security.
-- Features were delivered in short cycles with integration checkpoints to prevent drift between services.
-- Team syncs were done through recurring standups and merge-review checkpoints.
+---
 
-Tools and channels:
-- Project management tools: GitHub Issues, pull requests, branch-based workflow.
-- Communication channels: WhatsApp, in-person lab syncs at 42 Abu Dhabi.
+## 📖 Description
 
-## Technical Stack
-Frontend:
-- React 19, React Router 7, Vite (`rolldown-vite`), TailwindCSS, Three.js ecosystem (`@react-three/fiber`, `@react-three/drei`, `@react-three/rapier`).
+Quillow is a secure, social, and collaborative diary platform. Users can register and log in, manage friendships, create private or collaborative diary spaces, and interact in real time.
 
-Backend:
-- Node.js microservices using Fastify and Express.
-- `auth-service` for auth/identity, `diary-service` for diary/social domain, `realtime-service` for Socket.IO events, `api-gateway` for routing/proxy.
+**Key features:**
 
-Database:
-- PostgreSQL 16.
-- Chosen for relational integrity, strong indexing, transactional consistency, and good fit for user/friend/collaboration relationships.
+- 🔐 Secure authentication with JWT, Google OAuth, password reset, and 2FA
+- 👥 Friend system with requests, acceptance/decline flows, and presence-aware collaboration rules
+- 📓 Diary management with private/collaborative modes and collaborator invitations
+- ⚡ Real-time updates over WebSocket (presence, collaboration, notifications)
+- 🛡️ Defense-in-depth runtime: API gateway + OWASP ModSecurity WAF + Vault-backed secret loading
 
-Security and platform:
-- OWASP ModSecurity CRS (WAF), HashiCorp Vault (dev mode for secrets), Docker Compose, OpenSSL local TLS cert generation.
+---
 
-Major technical choices and justification:
-- Microservice split to isolate auth, domain logic, realtime traffic, and gateway concerns.
-- PostgreSQL schema constraints/triggers to enforce business rules at DB level (not only in API code).
-- WAF + gateway + JWT + Vault to create layered security controls.
+## 👥 Team
 
-## Database Schema
-Visual overview:
+| Login | Role | Responsibilities |
+|:---|:---|:---|
+| `inkahar` | PM · Backend Lead · DevOps/Security | Service orchestration, API gateway, realtime architecture, infra hardening, integration direction |
+| `aymohamm` | PO · Frontend Lead · Full-stack | UX/UI flows, core diary interaction screens, auth UX, user-facing validation and product alignment |
+| `fkuruthl` | Tech Lead (Auth/Integration) · Full-stack | Auth service integration, profile flows, testing support, cross-service coordination and documentation |
+| `smuneer` | Backend Developer (Diary & Realtime) | diary-service REST API, collaboration system with role-based permissions, real-time notification integration, WebSocket trigger endpoint, socket authentication |
+
+---
+
+## 🗂️ Project Management
+
+**Work organization:**
+- Split by domain ownership: frontend UX, backend services, and infrastructure/security
+- Features delivered in short cycles with integration checkpoints to prevent service drift
+- Recurring standups and merge-review checkpoints for team sync
+
+**Tools:**
+- GitHub Issues, pull requests, branch-based workflow
+- WhatsApp + in-person lab syncs at 42 Abu Dhabi
+
+---
+
+## 🛠️ Technical Stack
+
+### Frontend
+- React 19, React Router 7, Vite (`rolldown-vite`), TailwindCSS
+- Three.js ecosystem: `@react-three/fiber`, `@react-three/drei`, `@react-three/rapier`
+
+### Backend
+- Node.js microservices using Fastify and Express
+- `auth-service` · `diary-service` · `realtime-service` · `api-gateway`
+
+### Database
+- **PostgreSQL 16** — chosen for relational integrity, strong indexing, transactional consistency, and natural fit for user/friend/collaboration relationships
+
+### Security & Platform
+- OWASP ModSecurity CRS (WAF) · HashiCorp Vault (dev mode) · Docker Compose · OpenSSL TLS
+
+### Key Architecture Decisions
+
+| Decision | Justification |
+|:---|:---|
+| Microservice split | Isolate auth, domain logic, realtime traffic, and gateway concerns |
+| PostgreSQL constraints/triggers | Enforce business rules at DB level, not only in API code |
+| WAF + Gateway + JWT + Vault | Layered security controls (defense-in-depth) |
+
+---
+
+## 🗃️ Database Schema
 
 ```mermaid
 erDiagram
@@ -71,164 +100,290 @@ erDiagram
   users ||--o{ ws_connections : user_id
 ```
 
-Main tables and key fields:
-- `users`: `id (varchar PK)`, `username`, `email`, `password_hash`, `google_id`, `is_active`, timestamps.
-- `diary_entries`: `id (text PK)`, `owner_id`, `content`, `diary_type (private/collaborative)`, `is_private`.
-- `collaborators`: `id`, `entry_id`, `user_id`, `role (viewer/editor)`, `status`.
-- `friend_requests`: sender/receiver relationship with constrained `status`.
-- `friends`: bidirectional friendship links.
-- `notifications`: persisted notifications with metadata (`jsonb`) and read/archive states.
-- `oauth_tokens`, `oauth_states`, `password_reset_tokens`, `twofa_recovery_codes`.
-- `ws_connections`, `active_sessions`, `activity_log`.
+**Main tables:**
 
-Relationship and integrity notes:
-- Unique and check constraints enforce collaboration status/role and friend-request lifecycle.
-- Trigger `trg_enforce_single_diary_type_per_owner` enforces one private and one collaborative diary per owner.
+| Table | Key Fields |
+|:---|:---|
+| `users` | `id (varchar PK)`, `username`, `email`, `password_hash`, `google_id`, `is_active`, timestamps |
+| `diary_entries` | `id (text PK)`, `owner_id`, `content`, `diary_type (private/collaborative)`, `is_private` |
+| `collaborators` | `id`, `entry_id`, `user_id`, `role (viewer/editor)`, `status` |
+| `friend_requests` | sender/receiver relationship with constrained `status` |
+| `friends` | bidirectional friendship links |
+| `notifications` | persisted notifications with `jsonb` metadata and read/archive states |
+| `oauth_tokens` / `password_reset_tokens` / `twofa_recovery_codes` | auth lifecycle tables |
+| `ws_connections` / `active_sessions` / `activity_log` | realtime and audit tables |
 
-## Features List
-| Feature | Functionality | Team member(s) |
-|---|---|---|
-| Account registration/login | Standard credential auth with JWT issuance and validation | `inaidikai`, `fkuruthl` |
-| Google OAuth login/link | OAuth flow init/callback with account linking | `inaidikai`, `aymohamm` |
-| Two-factor authentication | 2FA enable/verify/disable, resend, recovery code regeneration | `fkuruthl`, `inaidikai` |
+> **Integrity note:** Trigger `trg_enforce_single_diary_type_per_owner` enforces one private and one collaborative diary per owner. Unique and check constraints enforce collaboration status/role and friend-request lifecycle.
+
+---
+
+## ✅ Features
+
+| Feature | Functionality | Owner(s) |
+|:---|:---|:---|
+| Account registration/login | Standard credential auth with JWT issuance and validation | `inkahar`, `fkuruthl` |
+| Google OAuth login/link | OAuth flow init/callback with account linking | `inkahar`, `aymohamm` |
+| Two-factor authentication | 2FA enable/verify/disable, resend, recovery code regeneration | `fkuruthl`, `inkahar` |
 | Password recovery | Forgot/reset password flows with token lifecycle | `fkuruthl`, `aymohamm` |
 | Profile management | User profile update and avatar upload | `fkuruthl`, `aymohamm` |
 | Friends system REST API | Complete friend request CRUD with online status integration | `smuneer`, `aymohamm` |
 | Diary entries REST API | Full CRUD with access control, privacy settings, and sharing | `smuneer`, `aymohamm` |
-| Collaboration system REST API | Invite/accept/decline/permissions management with role-based access | `smuneer`, `inaidikai`, `aymohamm` |
-| Notifications REST API | Pagination, unread count, mark as read, real-time delivery | `smuneer`, `inaidikai` , `aymohamm` |
-| Dashboard statistics | Aggregated stats for friends, entries, notifications, invites | `smuneer`, `inaidikai` |
+| Collaboration system REST API | Invite/accept/decline/permissions management with role-based access | `smuneer`, `inkahar`, `aymohamm` |
+| Notifications REST API | Pagination, unread count, mark as read, real-time delivery | `smuneer`, `inkahar`, `aymohamm` |
+| Dashboard statistics | Aggregated stats for friends, entries, notifications, invites | `smuneer`, `inkahar` |
 | User management REST API | Profile viewing, user search, friendship status | `smuneer`, `fkuruthl` |
-| Realtime notifications/presence | Socket-driven live notifications and online state | `smuneer`, `inaidikai` |
-| WebSocket trigger integration | REST-to-WebSocket notification bridge for instant delivery | `smuneer`, `inaidikai` |
+| Realtime notifications/presence | Socket-driven live notifications and online state | `smuneer`, `inkahar` |
+| WebSocket trigger integration | REST-to-WebSocket notification bridge for instant delivery | `smuneer`, `inkahar` |
 | 3D world experience | 3D scene entrypoint and interaction shell for diary access | `aymohamm` |
-| API gateway routing | Unified edge routing for auth/diary/realtime services | `inaidikai` |
-| WAF hardening | ModSecurity rules and targeted false-positive tuning | `inaidikai`, `fkuruthl` |
-| Vault secret loading | Runtime secret injection for services | `inaidikai`, `fkuruthl` |
-## Modules
-Scoring rule:
-- Major module = 2 pts
-- Minor module = 1 pt
+| API gateway routing | Unified edge routing for auth/diary/realtime services | `inkahar` |
+| WAF hardening | ModSecurity rules and targeted false-positive tuning | `inkahar`, `fkuruthl` |
+| Vault secret loading | Runtime secret injection for services | `inkahar`, `fkuruthl` |
 
-| Module Category | Module Name | Type | Points | Team Member(s) |
-|---|---|---|---:|---|
-| **Web** | Use a framework for both frontend and backend | Major | 2 | All team |
-| **Web** | Implement real-time features using WebSockets | Major | 2 | `smuneer`, `inaidikai` |
-| **Web** | Allow users to interact with other users | Major | 2 | `smuneer`, `aymohamm` |
-| **Web** | Complete notification system | Minor | 1 | `smuneer`, `inaidikai` |
-| **Web** | Real-time collaborative features | Minor | 1 | `smuneer`, `inaidikai`', `aymohamm` |
-| **User Management** | Standard user management and authentication | Major | 2 | `fkuruthl`, `inaidikai`, `aymohamm` |
-| **User Management** | Implement remote authentication (OAuth 2.0) | Minor | 1 | `inaidikai`, `fkuruthl` |
-| **User Management** | Implement 2FA system | Minor | 1 | `fkuruthl`, `inaidikai` |
-| **Artificial Intelligence** | Voice/speech integration for accessibility or interaction. | Minor | 1 | `aymohamm` |
-| **Cybersecurity** | WAF/ModSecurity + HashiCorp Vault | Major | 2 | `inaidikai`, `fkuruthl` |
-| **Gaming and UX** | Advanced 3D graphics (Three.js) | Major | 2 | `aymohamm` |
-| **DevOps** | Backend as microservices | Major | 2 | `inaidikai` |
+---
 
-**Total Points: 19**
+## 🏆 Modules
 
-## Individual Contributions
-inaidikai:
-- Built and integrated api-gateway proxy paths for auth/diary/realtime.
-- Implemented major realtime infrastructure and socket authentication flow.
-- Led infrastructure composition (docker-compose, service networking, Vault integration).
-- Added/maintained WAF behavior and security routing exceptions for valid app traffic.
-- Challenge handled: balancing strict security rules with collaborative editor payloads by route-level ModSecurity tuning.
+> **Scoring:** Major = 2 pts · Minor = 1 pt · **Total: 19 pts**
 
-aymohamm:
-- Developed core frontend flows (auth screens, 3D world entry, flipbook/diary-facing UI paths).
-- Implemented user-facing friend/collaboration interactions and form validation behavior.
-- Contributed to diary and auth service integration from UI to API.
-- Challenge handled: preserving UX consistency while supporting both standard and collaborative diary modes.
+| Category | Module | Type | Pts | Owner(s) |
+|:---|:---|:---:|:---:|:---|
+| Web | Framework for frontend and backend | Major | 2 | All team |
+| Web | Real-time features via WebSockets | Major | 2 | `smuneer`, `inkahar` |
+| Web | User-to-user interaction | Major | 2 | `smuneer`, `aymohamm` |
+| Web | Complete notification system | Minor | 1 | `smuneer`, `inkahar` |
+| Web | Real-time collaborative features | Minor | 1 | `smuneer`, `inkahar`, `aymohamm` |
+| User Management | Standard auth and user management | Major | 2 | `fkuruthl`, `inkahar`, `aymohamm` |
+| User Management | Remote authentication (OAuth 2.0) | Minor | 1 | `inkahar`, `fkuruthl` |
+| User Management | 2FA system | Minor | 1 | `fkuruthl`, `inkahar` |
+| Artificial Intelligence | Voice/speech integration | Minor | 1 | `aymohamm` |
+| Cybersecurity | WAF/ModSecurity + HashiCorp Vault | Major | 2 | `inkahar`, `fkuruthl` |
+| Gaming and UX | Advanced 3D graphics (Three.js) | Major | 2 | `aymohamm` |
+| DevOps | Backend as microservices | Major | 2 | `inkahar` |
 
-fkuruthl:
-- Contributed to auth and profile management flows, including integration and validation paths.
-- Supported infra/security integration (Vault/WAF touchpoints) and service interoperability.
-- Consolidated project documentation requirements and technical explanation assets.
-- Challenge handled: aligning auth/security behavior across multiple services while keeping local development setup reproducible.
+---
 
-smuneer:
-  - Friends management: Send/accept/decline friend requests, online status integration, bidirectional friendship creation, real-time notifications on all friendship actions.
-  - Diary entries CRUD: Create/read/update/delete with privacy controls, access control enforcement, sharing management, collaborator count aggregation.
-  - Collaboration system*: Role-based permissions (viewer/editor), invite/accept/decline flows, collaborator management, permission updates, online status for active collaborators, comprehensive access control.
-  - Notifications management: Pagination, unread count, mark as read, mark all as read, delete notifications.
-  - Dashboard statistics: Aggregated counts for friends, online friends, notifications, entries, pending invites.
-- Implemented notification service that bridges REST API to WebSocket for real-time delivery, enabling instant notifications across all friendship and collaboration actions.
-- Built WebSocket authentication middleware and trigger endpoint in realtime-service for REST-to-WebSocket integration.
-- Challenge handled: Implementing complex collaboration permissions with real-time notification triggers while maintaining data consistency across microservices, ensuring proper access control for shared diary entries, and creating a seamless bridge between REST API actions and WebSocket real-time delivery without message loss or race conditions.
-## Instructions
+## 👤 Individual Contributions
+
+<details>
+<summary><strong>🔧 inkahar</strong> — PM · Backend Lead · DevOps/Security</summary>
+
+<br>
+
+#### 🗺️ Ownership Scope
+
+| Area | Responsibility |
+|:---|:---|
+| 🏗️ Microservices architecture | Service boundaries and domain ownership model |
+| 🔀 API Gateway | Edge-layer routing and inter-service request flow |
+| 🛡️ WAF hardening | OWASP ModSecurity CRS integration and tuning |
+| 🔑 Vault secrets | Runtime secret lifecycle and seed workflow |
+| 🌐 3D environment | Integration support for Three.js app flows |
+
+#### 🧰 Stack
+
+**Platform & Runtime**
+- Node.js `22.22.0` · Docker + Docker Compose · PostgreSQL 16
+- Make-based orchestration: `make` · `make up` · `make vault-seed` · `make down`
+
+**Microservices & Routing**
+- `api-gateway` — central edge router/proxy
+- `auth-service` · `diary-service` · `realtime-service`
+- HTTP proxy-based route forwarding and service isolation
+- JWT-protected route forwarding and auth-aware gateway flows
+
+**Security & Hardening**
+- OWASP ModSecurity CRS (WAF) with route-level false-positive tuning
+- TLS local certificate setup via OpenSSL
+- Defense-in-depth path:
+```
+WAF  →  Gateway  →  Service JWT/Auth  →  DB constraints
+```
+
+**Secret Management**
+- HashiCorp Vault (dev mode) — runtime secret loading into services
+- Vault seed flow from `.env`
+- Managed keys: `JWT_SECRET` · `VAULT_ADDR` · `VAULT_TOKEN` · `VAULT_KV_PATHS` · OAuth/email secrets
+
+**Realtime / Infra Integration**
+- Cross-service Socket.IO delivery path support
+- Container networking and orchestration across all services
+- REST-to-realtime trigger pipeline support at architecture level
+
+**Frontend 3D Contribution**
+- React + Vite integration path for 3D access flow
+- `@react-three/fiber` · `@react-three/drei` · `@react-three/rapier`
+
+#### 📦 Technical Deliverables
+
+- Defined service split and inter-service communication model
+- Implemented unified API gateway routing map for auth/domain/realtime traffic
+- Enforced layered security at edge and runtime with WAF + Vault
+- Reduced WAF false positives without weakening required protections
+- Stabilized local infra boot sequence and service dependency wiring
+- Contributed to 3D environment integration in product UX flow
+
+#### ⚡ Engineering Challenges Solved
+
+> **WAF tuning vs. collaborative payloads** — ModSecurity CRS rules are aggressive by design, but rich-text diary content with nested JSON triggered false positives. Solution: route-level tuning to preserve broad WAF coverage while carving surgical exceptions only where app payloads genuinely differed from attack signatures.
+
+- Kept gateway routing deterministic while multiple services evolved in parallel
+- Prevented secret sprawl by centralizing sensitive config in Vault
+- Integrated security controls without blocking development velocity
+
+</details>
+
+---
+
+<details>
+<summary><strong>🎨 aymohamm</strong> — PO · Frontend Lead · Full-stack Developer</summary>
+
+<br>
+
+- Developed core frontend flows: auth screens, 3D world entry, flipbook/diary-facing UI paths
+- Implemented user-facing friend/collaboration interactions and form validation behavior
+- Contributed to diary and auth service integration from UI to API
+- **Challenge:** Preserving UX consistency while supporting both standard and collaborative diary modes
+
+</details>
+
+---
+
+<details>
+<summary><strong>🔐 fkuruthl</strong> — Tech Lead (Auth/Integration) · Full-stack Developer</summary>
+
+<br>
+
+- Contributed to auth and profile management flows, including integration and validation paths
+- Supported infra/security integration (Vault/WAF touchpoints) and service interoperability
+- Consolidated project documentation requirements and technical explanation assets
+- **Challenge:** Aligning auth/security behavior across multiple services while keeping local development setup reproducible
+
+</details>
+
+---
+
+<details>
+<summary><strong>⚙️ smuneer</strong> — Backend Developer (Diary & Realtime Services)</summary>
+
+<br>
+
+- **Friends management:** Send/accept/decline friend requests, online status integration, bidirectional friendship creation, real-time notifications on all friendship actions
+- **Diary entries CRUD:** Create/read/update/delete with privacy controls, access control enforcement, sharing management, collaborator count aggregation
+- **Collaboration system:** Role-based permissions (viewer/editor), invite/accept/decline flows, collaborator management, permission updates, online status for active collaborators, comprehensive access control
+- **Notifications management:** Pagination, unread count, mark as read, mark all as read, delete notifications
+- **Dashboard statistics:** Aggregated counts for friends, online friends, notifications, entries, pending invites
+- Implemented notification service bridging REST API to WebSocket for real-time delivery across all friendship and collaboration actions
+- Built WebSocket authentication middleware and trigger endpoint in `realtime-service` for REST-to-WebSocket integration
+- **Challenge:** Implementing complex collaboration permissions with real-time notification triggers while maintaining data consistency across microservices — ensuring proper access control for shared diary entries and a seamless REST-to-WebSocket bridge without message loss or race conditions
+
+</details>
+
+---
+
+## 🚀 Instructions
+
 ### Prerequisites
-- OS with Docker Engine + Docker Compose plugin.
-- Node.js `22.22.0` (from `.nvmrc`) and npm.
-- `openssl` (for local TLS cert generation).
-- `lsof` (used by `make dev` port check on many Unix systems).
+
+| Requirement | Notes |
+|:---|:---|
+| Docker Engine + Compose plugin | Any modern OS |
+| Node.js `22.22.0` | See `.nvmrc` |
+| `openssl` | For local TLS cert generation |
+| `lsof` | Used by `make dev` port check |
 
 ### Configuration (`.env`)
-1. Ensure `.env` exists at repository root.
-2. Configure required keys used by services:
-   - Postgres: `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, `PG*`.
-   - Auth/security: `JWT_SECRET`, `VAULT_ADDR`, `VAULT_TOKEN`, `VAULT_KV_PATHS`.
-   - OAuth/email: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI`, `EMAIL_*`.
-3. For safety, never commit real production secrets.
+
+1. Ensure `.env` exists at the repository root
+2. Configure required keys:
+
+```env
+# PostgreSQL
+POSTGRES_USER=...
+POSTGRES_PASSWORD=...
+POSTGRES_DB=...
+
+# Auth / Security
+JWT_SECRET=...
+VAULT_ADDR=...
+VAULT_TOKEN=...
+VAULT_KV_PATHS=...
+
+# OAuth / Email
+GOOGLE_CLIENT_ID=...
+GOOGLE_CLIENT_SECRET=...
+GOOGLE_REDIRECT_URI=...
+EMAIL_HOST=...
+```
+
+> ⚠️ **Never commit real production secrets.**
 
 ### Run (recommended)
-1. Install and start everything:
-   ```bash
-   make
-   ```
-2. This sequence runs:
-   - dependency install across workspaces,
-   - Docker services build/up,
-   - Vault seed from `.env`,
-   - frontend dev server on port `5173`.
 
-### Manual run (alternative)
-1. Start backend stack:
-   ```bash
-   make up
-   ```
-2. Seed Vault:
-   ```bash
-   make vault-seed
-   ```
-3. Start frontend:
-   ```bash
-   cd frontend && npm run dev
-   ```
+```bash
+make
+```
 
-### Access points
-- Frontend: `https://localhost:5173`
-- API Gateway: `http://localhost:8080`
-- WAF HTTPS entry: `https://localhost:8081`
-- Vault UI/API (dev): `http://localhost:8200`
+This runs: dependency install → Docker build/up → Vault seed → frontend dev server on `:5173`
 
+### Manual run
 
-### Stop and clean
-- Stop services:
-  ```bash
-  make down
-  ```
-- Full clean (also removes generated certs):
-  ```bash
-  make fclean
-  ```
+```bash
+# 1. Start backend stack
+make up
 
-## Resources
-Classic references:
-- 42 ft_transcendence subject and campus correction guides.
-- PostgreSQL documentation: schema design, indexes, constraints, triggers.
-- Fastify and Express official docs.
-- Socket.IO documentation (auth middleware, rooms, events).
-- OWASP ModSecurity CRS docs.
-- HashiCorp Vault docs (dev mode and KV usage).
-- React, React Router, Vite, Three.js / React Three Fiber docs.
+# 2. Seed Vault
+make vault-seed
 
-AI usage in this project:
-- Used AI to help draft documentation structure, consistency checks, and wording improvements.
-- Used AI for technical summarization of architecture and to cross-check that README sections match code layout.
-- AI was not used as a direct replacement for implementation ownership; code decisions and integration were made and validated by the team.
+# 3. Start frontend
+cd frontend && npm run dev
+```
 
-## Known Limitations
-- Current Vault setup is development mode only (`-dev`), not production-grade.
-- Local `.env` may include sensitive values; rotate and externalize for any shared or production environment.
-- WAF tuning is optimized for this app payload profile and may require recalibration if API’s changes.
+### Access Points
+
+| Service | URL |
+|:---|:---|
+| Frontend | `https://localhost:5173` |
+| API Gateway | `http://localhost:8080` |
+| WAF HTTPS entry | `https://localhost:8081` |
+| Vault UI/API (dev) | `http://localhost:8200` |
+
+### Stop & Clean
+
+```bash
+make down      # stop services
+make fclean    # full clean — also removes generated certs
+```
+
+---
+
+## 📚 Resources
+
+**Classic references:**
+- 42 ft_transcendence subject and campus correction guides
+- PostgreSQL docs: schema design, indexes, constraints, triggers
+- Fastify and Express official docs
+- Socket.IO docs: auth middleware, rooms, events
+- OWASP ModSecurity CRS docs
+- HashiCorp Vault docs (dev mode and KV usage)
+- React, React Router, Vite, Three.js / React Three Fiber docs
+
+**AI usage in this project:**
+- Used to help draft documentation structure, consistency checks, and wording improvements
+- Used for technical summarization and cross-checking README sections against code layout
+- AI was not used as a replacement for implementation ownership — code decisions and integration were made and validated by the team
+
+---
+
+## ⚠️ Known Limitations
+
+- Vault setup is **development mode only** (`-dev`) — not production-grade
+- Local `.env` may include sensitive values — rotate and externalize for any shared or production environment
+- WAF tuning is optimized for this app's payload profile and may require recalibration if the API changes
+
+---
+
+<div align="center">
+
+*Built with ☕ at 42 Abu Dhabi*
+
+</div>
