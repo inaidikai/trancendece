@@ -557,6 +557,12 @@ const googleAuthCallback = async (req, res) => {
           return res.status(500).json({ error: 'Database error during user creation' });
         }
 
+        // Send welcome email for new OAuth users
+        sendWelcomeEmail(email, name || username).catch((welcomeErr) => {
+          console.error('Failed to send welcome email (OAuth):', welcomeErr);
+          // Don't fail OAuth signup if email fails
+        });
+
         // Generate JWT token
         const token = generateToken(userId);
         res.status(201).json({

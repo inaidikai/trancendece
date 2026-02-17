@@ -41,7 +41,7 @@ build_payload() {
   EMAIL_SECURE=${EMAIL_SECURE:-false}
   EMAIL_USER=${EMAIL_USER:-your-email@gmail.com}
   EMAIL_PASSWORD=${EMAIL_PASSWORD:-your-app-password}
-  EMAIL_FROM=${EMAIL_FROM:-noreply@auth.com}
+  EMAIL_FROM=${EMAIL_FROM:-${EMAIL_USER}}
   PGHOST=${PGHOST:-postgres}
   PGPORT=${PGPORT:-5432}
   PGUSER=${PGUSER:-postgres}

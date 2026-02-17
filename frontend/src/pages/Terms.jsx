@@ -25,7 +25,7 @@ export default function Terms() {
 
         <h2>1. Use of the App</h2>
         <ul>
-          <li>You must be at least 10 years old.</li>
+          <li>You must be at least 8 years old.</li>
           <li>Keep your account credentials secure.</li>
         </ul>
 
@@ -69,7 +69,7 @@ export default function Terms() {
         <p>Terms may be updated at any time; continued use means acceptance.</p>
 
         <h2>8. Contact</h2>
-        <p>Questions? Email us at contact.quilloww@gmail.com</p>
+        <p>Questions? Email us at team.quillow@gmail.com</p>
       </div>
     </div>
   );
