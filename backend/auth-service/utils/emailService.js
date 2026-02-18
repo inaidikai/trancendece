@@ -1,7 +1,7 @@
-const nodemailer = require('nodemailer'); //what is nodemailer and why we need it
-const { loadVaultSecrets } = require('../../shared/vault');//why
+const nodemailer = require('nodemailer');
+const { loadVaultSecrets } = require('../../shared/vault');
 
-async function getTransporter() { //explain this function and why we need it
+async function getTransporter() {
   if (!process.env.EMAIL_USER || !process.env.EMAIL_PASSWORD) 
   {
     try 
@@ -16,19 +16,19 @@ async function getTransporter() { //explain this function and why we need it
 
   return nodemailer.createTransport(
   {
-    host: process.env.EMAIL_HOST || 'smtp.gmail.com', //what is host and why we need it and smtp
-    port: Number(process.env.EMAIL_PORT || 587),  //why we need port and why 587
-    secure: process.env.EMAIL_SECURE === 'true', //what is secure and why we need it
+    host: process.env.EMAIL_HOST || 'smtp.gmail.com',
+    port: Number(process.env.EMAIL_PORT || 587),
+    secure: process.env.EMAIL_SECURE === 'true',
     auth: 
     {
-      user: process.env.EMAIL_USER || 'your-email@gmail.com',//
-      pass: process.env.EMAIL_PASSWORD || 'your-app-password',//why we need meil user and passw
+      user: process.env.EMAIL_USER || 'your-email@gmail.com',
+      pass: process.env.EMAIL_PASSWORD || 'your-app-password',
     },
   });
 }
 
-function baseMailOptions(to, subject) //explain this function and why we need it with examples
-{
+function baseMailOptions(to, subject) {
+
   return {
     from: process.env.EMAIL_FROM || 'Quillow <noreply@auth.com>',
     to,
@@ -38,7 +38,7 @@ function baseMailOptions(to, subject) //explain this function and why we need it
 }
 
 
-const sendPasswordResetEmail = async (email, resetToken, userName) => { //expl this funtion
+const sendPasswordResetEmail = async (email, resetToken, userName) => {
   try {
     const transporter = await getTransporter();
     const resetLink = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/reset-password?token=${resetToken}`;
@@ -48,7 +48,7 @@ const sendPasswordResetEmail = async (email, resetToken, userName) => { //expl t
       text: `Hi ${userName || email},
 
 You requested a password reset for your Quillow account.
-Reset your password using this link: ${resetLink} //wh ydollar sign and curly braces and what is resetLink
+Reset your password using this link: ${resetLink}
 
 This link expires in 1 hour.
 If you did not request this, you can ignore this email.
@@ -60,7 +60,7 @@ Quillow Team`,
         <p>You requested a password reset. Click the link below to reset your password:</p>
         <p><a href="${resetLink}" style="background-color: #4CAF50; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">Reset Password</a></p>
         <p>This link expires in 1 hour.</p>
-        <p>If you didn't request this, please ignore this email.</p> //why lines repeating
+        <p>If you didn't request this, please ignore this email.</p>
         <p>Best regards,<br/>Quillow Team</p>
       `,
     };
@@ -70,40 +70,6 @@ Quillow Team`,
     return true;
   } catch (error) {
     console.error('Error sending password reset email:', error);
-    return false;
-  }
-};
-
-// Send verification email
-const sendVerificationEmail = async (email, verificationToken, userName) => {
-  try {
-    const transporter = await getTransporter();
-    const verificationLink = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/verify-email?token=${verificationToken}`;
-
-    const mailOptions = {
-      ...baseMailOptions(email, 'Verify Your Email'),
-      text: `Hi ${userName || email},
-
-Please verify your email address using this link: ${verificationLink}
-
-This link expires in 24 hours.
-
-Quillow Team`,
-      html: `
-        <h2>Welcome!</h2>
-        <p>Hi ${userName || email},</p>
-        <p>Please verify your email address by clicking the link below:</p>
-        <p><a href="${verificationLink}" style="background-color: #4CAF50; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">Verify Email</a></p>
-        <p>This link expires in 24 hours.</p>
-        <p>Best regards,<br/>Quillow Team</p>
-      `,
-    };
-
-    await transporter.sendMail(mailOptions);
-    console.log(`Verification email sent to ${email}`);
-    return true;
-  } catch (error) {
-    console.error('Error sending verification email:', error);
     return false;
   }
 };
@@ -224,11 +190,8 @@ Quillow Team`,
 
 module.exports = {
   sendPasswordResetEmail,
-  sendVerificationEmail,
   sendWelcomeEmail,
   sendOAuthCodeEmail,
   sendTwoFAEmail,
   testEmailConfig,
 };
-
-//co,e back to this late

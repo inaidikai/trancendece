@@ -41,7 +41,7 @@ export default defineConfig({
         target: wafTarget,
         changeOrigin: true,
         secure: wafProtocol === 'https' ? false : undefined,
-        rewrite: (path) => path.replace(/^\/api/, ''),
+        rewrite: (path) => path,
       },
       '/socket.io': {
         target: wafTarget,

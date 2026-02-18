@@ -1,31 +1,31 @@
-const bcrypt = require('bcryptjs'); //importing bcryptjs library for hashing and comparing passwords
-const jwt = require('jsonwebtoken'); //importing jsonwebtoken library for generating and verifying JWT tokens
-const { v4: uuidv4 } = require('uuid'); //whats this line
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+const { v4: uuidv4 } = require('uuid');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'fallback'; //what is process.env
+const JWT_SECRET = process.env.JWT_SECRET || 'fallback';
 const JWT_EXPIRE = process.env.JWT_EXPIRE || '7d';
 
 // Hash password
-const hashPassword = async (password) => { //whats asynsc  and password  from where
-  const salt = await bcrypt.genSalt(10); //what is await and is genSalt a function from bcrypt and what does 10 mean
-  return bcrypt.hash(password, salt); //whats hppng here 
+const hashPassword = async (password) => {
+  const salt = await bcrypt.genSalt(10);
+  return bcrypt.hash(password, salt);
 };
 
 // Compare password
-const comparePassword = async (password, hash) => { //we camping the currecnt passwored with hashed?, but wont it salt first?
+const comparePassword = async (password, hash) => {
   return bcrypt.compare(password, hash);
 };
 
 // Generate JWT token
-const generateToken = (userId) => { //what is userID
-  return jwt.sign({ userId }, JWT_SECRET, { expiresIn: JWT_EXPIRE }); //what is jwt.sign and what are the parameters we are passing here
+const generateToken = (userId) => {
+  return jwt.sign({ userId }, JWT_SECRET, { expiresIn: JWT_EXPIRE });
 };
 
 // Verify JWT token
-const verifyToken = (token) => { //EXPLAIN this line and how it works
+const verifyToken = (token) => {
   try 
   {
-    return jwt.verify(token, JWT_SECRET); //expl
+    return jwt.verify(token, JWT_SECRET);
   } 
   catch (err) 
   {
@@ -34,23 +34,23 @@ const verifyToken = (token) => { //EXPLAIN this line and how it works
 };
 
 // Generate random ID
-const generateId = () => { //explain this fucntion
+const generateId = () => {
   return uuidv4();
 };
 
 const validatePasswordPolicy = (password) => {
-  const value = String(password || ''); //expla
-  const errors = []; //expl
+  const value = String(password || '');
+  const errors = [];
 
   if (value.length < 8) errors.push('Be at least 8 characters');
-  if (!/[A-Z]/.test(value)) errors.push('Have at least 1 uppercase letter (A-Z)'); //what is test and push 
+  if (!/[A-Z]/.test(value)) errors.push('Have at least 1 uppercase letter (A-Z)'); 
   if (!/[a-z]/.test(value)) errors.push('Have at least 1 lowercase letter (a-z)');
   if (!/[0-9]/.test(value)) errors.push('Have at least 1 number (0-9)');
   if (!/[!@#$%^&*()_+\-=[\]{};:'",.<>/?\\|`~]/.test(value)) {
     errors.push('Have at least 1 special character (!@#$%^&*()_+-=[]{}etc)');
   }
 
-  return { valid: errors.length === 0, errors }; //cant underta
+  return { valid: errors.length === 0, errors };
 };
 
 module.exports = {

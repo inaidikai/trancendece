@@ -1,20 +1,4 @@
 const rateLimit = require('express-rate-limit');
-const { RedisStore } = require('rate-limit-redis');
-const Redis = require('ioredis');
-
-const buildStore = () => {
-  const redisUrl = process.env.REDIS_URL;
-  if (!redisUrl) return undefined;
-
-  const client = new Redis(redisUrl, {
-    maxRetriesPerRequest: 2,
-    enableReadyCheck: true,
-  });
-
-  return new RedisStore({
-    sendCommand: (...args) => client.call(...args),
-  });
-};
 
 const keyGenerator = (req) => req.ip || req.connection?.remoteAddress || req.socket?.remoteAddress || 'unknown';
 
@@ -24,7 +8,6 @@ const createRateLimiter = (maxRequests, windowMs) =>
     max: maxRequests,
     standardHeaders: true,
     legacyHeaders: false,
-    store: buildStore(),
     keyGenerator,
     handler: (req, res, _next, options) => {
       const resetTime = req.rateLimit?.resetTime;

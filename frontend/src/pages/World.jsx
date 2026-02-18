@@ -929,6 +929,7 @@ export default function World() {
   const [books, setBooks] = useState([{ id: "1", pos: [1, 1.0, 7] }]);
   const [prompt, setPrompt] = useState(null);
   const sceneLockRef = useRef(null);
+  const lockInProgressRef = useRef(false);
   const frogPos = useMemo(() => [10, 0.7, -3], []);
   const minionAudioRef = useRef(null);
   const ambientAudioRef = useRef(null);
@@ -950,6 +951,15 @@ export default function World() {
   const showWorldLoading =
     shouldRenderWebGL &&
     (!sceneReady || worldLoadState.active || Number(worldLoadState.progress || 0) < 100);
+
+  const canPointerLock = useMemo(() => {
+    if (typeof document === "undefined") return false;
+    const target = document.body;
+    return Boolean(
+      "pointerLockElement" in document &&
+        typeof target?.requestPointerLock === "function"
+    );
+  }, []);
 
   const handleWorldLoadingStatus = useCallback((status) => {
     setWorldLoadState((prev) => {
@@ -981,6 +991,24 @@ export default function World() {
     setSceneReady(false);
     setWorldLoadState({ active: true, progress: 0 });
   }, [canvasResetKey, shouldRenderWebGL]);
+
+  useEffect(() => {
+    if (!canPointerLock) return;
+
+    const handleChange = () => {
+      lockInProgressRef.current = false;
+    };
+    const handleError = () => {
+      lockInProgressRef.current = false;
+    };
+
+    document.addEventListener("pointerlockchange", handleChange);
+    document.addEventListener("pointerlockerror", handleError);
+    return () => {
+      document.removeEventListener("pointerlockchange", handleChange);
+      document.removeEventListener("pointerlockerror", handleError);
+    };
+  }, [canPointerLock]);
   
   useEffect(() => {
     const minion = new Audio("/sfx/minion-speaking-made-with-Voicemod.mp3");
@@ -1157,9 +1185,23 @@ export default function World() {
   }
 
   const requestScenePointerLock = useCallback(() => {
-    if (isMobile) return;
-    sceneLockRef.current?.requestPointerLock?.();
-  }, [isMobile]);
+    if (isMobile || !canPointerLock) return;
+    if (!sceneLockRef.current) return;
+    if (document.pointerLockElement === sceneLockRef.current) return;
+    if (lockInProgressRef.current) return;
+
+    lockInProgressRef.current = true;
+    try {
+      const maybePromise = sceneLockRef.current.requestPointerLock();
+      if (maybePromise && typeof maybePromise.catch === "function") {
+        maybePromise.catch(() => {
+          lockInProgressRef.current = false;
+        });
+      }
+    } catch (_) {
+      lockInProgressRef.current = false;
+    }
+  }, [isMobile, canPointerLock]);
 
   return (
     <div
@@ -1214,7 +1256,9 @@ export default function World() {
               <ambientLight intensity={0.6} />
               <directionalLight position={[5, 10, 5]} intensity={0.1} />
 
-              {!isMobile && <PointerLockControls selector="#world-scene-lock-target" />}
+              {!isMobile && canPointerLock && (
+                <PointerLockControls selector="#world-scene-lock-target" />
+              )}
 
               <Physics>
                 <Ocean y={-0.5} size={600} />

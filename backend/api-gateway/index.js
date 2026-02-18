@@ -79,10 +79,12 @@ app.register(httpProxy, {
 app.register(httpProxy, {
   upstream: "http://diary-service:8002",
   prefix: "/diary",
+  rewritePrefix: "",
 });
 app.register(httpProxy, {
   upstream: "http://diary-service:8002",
   prefix: "/api/diary",
+  rewritePrefix: "",
 });
 
 app.register(httpProxy, {

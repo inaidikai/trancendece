@@ -1,6 +1,16 @@
 import { getToken } from "../../auth/authApi";
 
 const API_BASE = (import.meta.env?.VITE_API_URL || "/api").replace(/\/$/, "");
+const API_ROOT = API_BASE.endsWith("/api") ? API_BASE.slice(0, -4) : API_BASE;
+const USERS_PREFIX = "/api/users";
+
+function buildDiaryUrl(path = "") {
+  const normalized = path.startsWith("/") ? path : `/${path}`;
+  if (normalized.startsWith(USERS_PREFIX)) {
+    return `${API_ROOT}${normalized}`;
+  }
+  return `${API_BASE}/diary${normalized}`;
+}
 
 function looksLikeHtmlDocument(value = "") {
   const trimmed = String(value).trim();
@@ -38,7 +48,7 @@ async function parseResponse(response) {
 
 export async function diaryRequest(path, { method = "GET", body, headers } = {}) {
   const token = getToken();
-  const response = await fetch(`${API_BASE}/diary${path}`, {
+  const response = await fetch(buildDiaryUrl(path), {
     method,
     headers: {
       "Content-Type": "application/json",

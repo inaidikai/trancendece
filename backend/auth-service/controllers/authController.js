@@ -1,6 +1,6 @@
 const db = require('../config/database');
 const {hashPassword, comparePassword, generateToken, generateId, verifyToken, validatePasswordPolicy,} = require('../utils/auth');
-const { sendWelcomeEmail, sendTwoFAEmail } = require('../utils/emailService');
+const { sendTwoFAEmail } = require('../utils/emailService');
 const { loadVaultSecrets } = require('../../shared/vault');
 
 const TWO_FA_CODE_EXPIRY_MS = 2 * 60 * 1000;
@@ -83,12 +83,6 @@ const register = async (req, res) => { // Register new user
     `;
 
     await db.run(query, [userId, email.toLowerCase(), username, hashedPassword, full_name || null]);
-
-    // Send welcome email
-    sendWelcomeEmail(email, full_name || username).catch((welcomeErr) => {
-      console.error('Failed to send welcome email:', welcomeErr);
-      // Don't fail registration if email fails
-    });
 
     const token = generateToken(userId);
     return res.status(201).json({
@@ -369,12 +363,10 @@ const getUserById = async (req, res) => {
   }
 };
 
-// ==================== GOOGLE OAUTH FUNCTIONS ====================
 
-/**
- * Initiates Google OAuth flow - returns Google authorization URL
- * Frontend redirects user to this URL
- */
+//Initiates Google OAuth flow - returns Google authorization URL
+//Frontend redirects user to this URL
+
 const googleAuthInit = async (req, res) => {
   await ensureGoogleOAuthSecrets();
   const clientId = process.env.GOOGLE_CLIENT_ID;
