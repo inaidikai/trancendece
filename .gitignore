@@ -10,6 +10,7 @@ infrastructure/certs/*.crt
 infrastructure/certs/*.srl
 .env
 .env.*
+!.env.example
 
 # Vault bootstrap artifacts
 infrastructure/vault/bootstrap.vault.source.sh
