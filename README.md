@@ -40,7 +40,7 @@ Quillow is a secure, social, and collaborative diary platform. Users can registe
 | `inkahar` | Backend Lead · DevOps/Security | Service orchestration, API gateway, routing architecture, WAF/Vault hardening, 3D environment integration direction |
 | `aymohamm` | PO · Frontend Lead | UX/UI flows, core diary interaction screens, auth UX, user-facing validation and product alignment |
 | `fkuruthl` | PM · Tech Lead (Auth-Service) | Project management, sprint planning, auth-service architecture and implementation, security hardening, documentation |
-| `smuneer` | Backend Developer (Diary & Realtime) | diary-service REST API, collaboration system with role-based permissions, real-time notification integration, WebSocket trigger endpoint, socket authentication |
+| `smuneer` | Backend Developer . Tech Lead (Diary & Realtime) | diary-service REST API, collaboration system with role-based permissions, real-time notification integration, WebSocket trigger endpoint, socket authentication |
 
 ---
 
@@ -56,7 +56,7 @@ Quillow is a secure, social, and collaborative diary platform. Users can registe
 - **Jira:** [Team board & sprint tracking](https://transcnevnvnencne.atlassian.net/jira/core/projects/PM/board?filter=assignee%20IN%20(%22712020%3A72fa8ce1-4cca-4f19-8fd0-ad9e012a78ab%22%2C%20%22712020%3A3e9eeeb2-f71f-40ea-80e7-2c3e057c7e65%22%2C%20%22712020%3Acf318589-e7e2-4db0-ad4a-447d2c8f5923%22%2C%20%225ea5a337c5c6230baae0fd76%22)&groupBy=status)
 - **Notion:** [Documentation, runbooks, and decision logs](https://www.notion.so/TRANSCENDENCEEE-3-2f10353c2aa781bd830dd3f011bb4d1e?p=2f10353c2aa7815dad02c296d73b55e5&pm=s)
 - GitHub Issues, pull requests, branch-based workflow
-- WhatsApp + in-person lab syncs at 42 Abu Dhabi
+- WhatsApp, Google Meet, in-person lab syncs at 42 Abu Dhabi
 
 ---
 
@@ -141,7 +141,6 @@ erDiagram
 | Two-factor authentication | 2FA enable/verify/disable, resend, recovery code regeneration | `fkuruthl`, `inkahar` |
 | Password recovery | Forgot/reset password flows with token lifecycle | `fkuruthl`, `aymohamm` |
 | Profile management | User profile update and avatar upload | `fkuruthl`, `aymohamm` |
-
 | Collaboration system REST API | Invite/accept/decline/permissions management with role-based access | `smuneer`, `inkahar`, `aymohamm` |
 | Notifications REST API | Pagination, unread count, mark as read, real-time delivery | `smuneer`, `inkahar`, `aymohamm` |
 | Dashboard statistics | Aggregated stats for friends, entries, notifications, invites | `smuneer`, `inkahar` |
@@ -181,7 +180,6 @@ erDiagram
 |:---|:---|:---:|:---:|:---|:---|
 | Web | Framework for frontend and backend | Major | 2 | All team | React 19 + Vite for frontend; Fastify/Express patterns for backend microservices; unified Node.js runtime |
 | Web | Real-time features via WebSockets | Major | 2 | `smuneer`, `inkahar` | Socket.IO with rooms, custom event handlers, and authenticated WebSocket proxy at API gateway |
-| Web | User-to-user interaction | Major | 2 | `smuneer`, `aymohamm` | Friend request/acceptance/decline REST API, collaborator invitations, presence-aware messaging |
 | Web | Complete notification system | Minor | 1 | `smuneer`, `inkahar` | Persistent PostgreSQL table, REST pagination, real-time WebSocket delivery, unread count tracking |
 | Web | Real-time collaborative features | Minor | 1 | `smuneer`, `inkahar`, `aymohamm` | Socket.IO rooms for diary sessions, role-based permission checks, live presence for active editors |
 | User Management | Standard auth and user management | Major | 2 | `fkuruthl`, `inkahar`, `aymohamm` | JWT token issuance, Bcrypt password hashing, user profile endpoints, session management |
