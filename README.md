@@ -53,6 +53,8 @@ Quillow is a secure, social, and collaborative diary platform. Users can registe
 - Recurring standups and merge-review checkpoints for team sync
 
 **Tools:**
+- **Jira:** [Team board & sprint tracking](https://transcnevnvnencne.atlassian.net/jira/core/projects/PM/board?filter=assignee%20IN%20(%22712020%3A72fa8ce1-4cca-4f19-8fd0-ad9e012a78ab%22%2C%20%22712020%3A3e9eeeb2-f71f-40ea-80e7-2c3e057c7e65%22%2C%20%22712020%3Acf318589-e7e2-4db0-ad4a-447d2c8f5923%22%2C%20%225ea5a337c5c6230baae0fd76%22)&groupBy=status)
+- **Notion:** [Documentation, runbooks, and decision logs](https://www.notion.so/TRANSCENDENCEEE-3-2f10353c2aa781bd830dd3f011bb4d1e?p=2f10353c2aa7815dad02c296d73b55e5&pm=s)
 - GitHub Issues, pull requests, branch-based workflow
 - WhatsApp + in-person lab syncs at 42 Abu Dhabi
 
