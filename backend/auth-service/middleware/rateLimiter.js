@@ -1,34 +1,40 @@
-// Simple in-memory rate limiter for auth endpoints
-const createRateLimiter = (maxRequests, windowMs) => {
-  const requests = new Map();
+const rateLimit = require('express-rate-limit');
+const { RedisStore } = require('rate-limit-redis');
+const Redis = require('ioredis');
 
-  return (req, res, next) => {
-    const key = req.ip || req.connection.remoteAddress;
-    const now = Date.now();
-    const windowStart = now - windowMs;
+const buildStore = () => {
+  const redisUrl = process.env.REDIS_URL;
+  if (!redisUrl) return undefined;
 
-    if (!requests.has(key)) {
-      requests.set(key, []);
-    }
+  const client = new Redis(redisUrl, {
+    maxRetriesPerRequest: 2,
+    enableReadyCheck: true,
+  });
 
-    const userRequests = requests.get(key);
-    // Clean old requests outside the window
-    const recentRequests = userRequests.filter(timestamp => timestamp > windowStart);
-    requests.set(key, recentRequests);
-
-    if (recentRequests.length >= maxRequests) {
-      return res.status(429).json({
-        error: 'Too many requests. Please try again later.',
-        retryAfter: Math.ceil((recentRequests[0] + windowMs - now) / 1000),
-      });
-    }
-
-    recentRequests.push(now);
-    res.set('X-RateLimit-Limit', maxRequests);
-    res.set('X-RateLimit-Remaining', maxRequests - recentRequests.length);
-    next();
-  };
+  return new RedisStore({
+    sendCommand: (...args) => client.call(...args),
+  });
 };
+
+const keyGenerator = (req) => req.ip || req.connection?.remoteAddress || req.socket?.remoteAddress || 'unknown';
+
+const createRateLimiter = (maxRequests, windowMs) =>
+  rateLimit({
+    windowMs,
+    max: maxRequests,
+    standardHeaders: true,
+    legacyHeaders: false,
+    store: buildStore(),
+    keyGenerator,
+    handler: (req, res, _next, options) => {
+      const resetTime = req.rateLimit?.resetTime;
+      const retryAfter = resetTime ? Math.ceil((resetTime.getTime() - Date.now()) / 1000) : undefined;
+      return res.status(options.statusCode).json({
+        error: 'Too many requests. Please try again later.',
+        ...(retryAfter ? { retryAfter } : {}),
+      });
+    },
+  });
 
 // 5 requests per 15 minutes for registration
 const registerLimiter = createRateLimiter(5, 15 * 60 * 1000);

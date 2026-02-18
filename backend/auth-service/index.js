@@ -2,7 +2,6 @@ const fastify = require("fastify")({ logger: true });
 const jwt = require("@fastify/jwt");
 const fastifyExpress = require("@fastify/express");
 const express = require("express");
-const cookieParser = require("cookie-parser");
 let db;
 let authRoutes;
 let userRoutes;
@@ -15,6 +14,7 @@ const ensureAuthSchema = async () => {
     ALTER TABLE users
       ADD COLUMN IF NOT EXISTS avatar_url TEXT,
       ADD COLUMN IF NOT EXISTS google_id VARCHAR(255),
+      ADD COLUMN IF NOT EXISTS oauth_provider VARCHAR(50),
       ADD COLUMN IF NOT EXISTS is_2fa_enabled BOOLEAN NOT NULL DEFAULT FALSE,
       ADD COLUMN IF NOT EXISTS two_fa_code TEXT,
       ADD COLUMN IF NOT EXISTS two_fa_code_expires TIMESTAMP
@@ -117,7 +117,6 @@ const start = async () => {
 
     await fastify.register(fastifyExpress);
     fastify.use(express.json());
-    fastify.use(cookieParser());
     fastify.use(authRoutes);
     fastify.use("/users", userRoutes);
     await waitForDatabaseReady(DB_RETRY_ATTEMPTS, DB_RETRY_DELAY_MS);

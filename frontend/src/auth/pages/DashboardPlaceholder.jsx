@@ -1391,6 +1391,13 @@ export default function DashboardPlaceholder({ navigate }) {
   const handleAvatarChange = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
+    // Validate file size (5 MB max)
+    if (file.size > 5 * 1024 * 1024) {
+      setProfileError("Avatar file must be 5 MB or less.");
+      return;
+    }
+
     setProfileAvatarProcessing(true);
     try {
       const compressed = await compressAvatar(file);

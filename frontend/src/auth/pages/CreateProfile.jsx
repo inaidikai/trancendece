@@ -60,6 +60,13 @@ export default function CreateProfile({ navigate }) {
   const handleAvatar = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
+    // Validate file size (5 MB max)
+    if (file.size > 5 * 1024 * 1024) {
+      setBanner({ type: "error", text: "Avatar file must be 5 MB or less." });
+      return;
+    }
+
     setAvatarProcessing(true);
     try {
       const compressed = await compressAvatar(file);

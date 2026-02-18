@@ -10,13 +10,14 @@
     "@fastify/jwt": "^6.7.1",
     "axios": "^1.6.2",
     "bcryptjs": "^2.4.3",
-    "cookie-parser": "^1.4.7",
     "express": "^4.19.2",
+    "express-rate-limit": "^8.2.1",
     "fastify": "^4.25.0",
+    "ioredis": "^5.9.3",
     "jsonwebtoken": "^9.0.2",
-    "multer": "^1.4.5-lts.1",
     "nodemailer": "^6.9.15",
     "pg": "^8.18.0",
+    "rate-limit-redis": "^4.3.1",
     "speakeasy": "^2.0.0",
     "uuid": "^9.0.1"
   }

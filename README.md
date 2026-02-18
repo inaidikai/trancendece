@@ -37,9 +37,9 @@ Quillow is a secure, social, and collaborative diary platform. Users can registe
 
 | Login | Role | Responsibilities |
 |:---|:---|:---|
-| `inkahar` | PM · Backend Lead · DevOps/Security | Service orchestration, API gateway, routing architecture, WAF/Vault hardening, 3D environment integration direction |
+| `inkahar` | Backend Lead · DevOps/Security | Service orchestration, API gateway, routing architecture, WAF/Vault hardening, 3D environment integration direction |
 | `aymohamm` | PO · Frontend Lead · Full-stack | UX/UI flows, core diary interaction screens, auth UX, user-facing validation and product alignment |
-| `fkuruthl` | Tech Lead (Auth/Integration) · Full-stack | Auth service integration, profile flows, testing support, cross-service coordination and documentation |
+| `fkuruthl` | PM · Tech Lead (Auth-Service) · Full-stack | Project management, sprint planning, auth-service architecture and implementation, security hardening, documentation |
 | `smuneer` | Backend Developer (Diary & Realtime) | diary-service REST API, collaboration system with role-based permissions, real-time notification integration, WebSocket trigger endpoint, socket authentication |
 
 ---
@@ -79,6 +79,7 @@ Quillow is a secure, social, and collaborative diary platform. Users can registe
 
 ### Database
 - **PostgreSQL 16** — chosen for relational integrity, strong indexing, transactional consistency, and natural fit for user/friend/collaboration relationships
+  - **Why PostgreSQL over alternatives:** MySQL lacks advanced constraint/trigger capabilities needed for collaboration rules; MongoDB's document model doesn't enforce referential integrity for friend/diary relationships; SQLite has concurrency limitations for multi-service access. PostgreSQL's ACID guarantees, constraint triggers, and JSONB support for flexible notification metadata made it the optimal choice for this collaborative application.
 
 ### Security & Platform
 - OWASP ModSecurity CRS (WAF) · HashiCorp Vault (server mode, locally initialized/unsealed) · Docker Compose · OpenSSL TLS
@@ -133,8 +134,8 @@ erDiagram
 
 | Feature | Functionality | Owner(s) |
 |:---|:---|:---|
-| Account registration/login | Standard credential auth with JWT issuance and validation | `inkahar`, `fkuruthl` |
-| Google OAuth login/link | OAuth flow init/callback with account linking | `inkahar`, `aymohamm` |
+| Account registration/login | Standard credential auth with JWT issuance and validation | `fkuruthl`, `inkahar` |
+| Google OAuth login/link | OAuth flow init/callback with account linking | `fkuruthl`, `aymohamm` |
 | Two-factor authentication | 2FA enable/verify/disable, resend, recovery code regeneration | `fkuruthl`, `inkahar` |
 | Password recovery | Forgot/reset password flows with token lifecycle | `fkuruthl`, `aymohamm` |
 | Profile management | User profile update and avatar upload | `fkuruthl`, `aymohamm` |
@@ -157,20 +158,39 @@ erDiagram
 
 > **Scoring:** Major = 2 pts · Minor = 1 pt · **Total: 19 pts**
 
-| Category | Module | Type | Pts | Owner(s) |
-|:---|:---|:---:|:---:|:---|
-| Web | Framework for frontend and backend | Major | 2 | All team |
-| Web | Real-time features via WebSockets | Major | 2 | `smuneer`, `inkahar` |
-| Web | User-to-user interaction | Major | 2 | `smuneer`, `aymohamm` |
-| Web | Complete notification system | Minor | 1 | `smuneer`, `inkahar` |
-| Web | Real-time collaborative features | Minor | 1 | `smuneer`, `inkahar`, `aymohamm` |
-| User Management | Standard auth and user management | Major | 2 | `fkuruthl`, `inkahar`, `aymohamm` |
-| User Management | Remote authentication (OAuth 2.0) | Minor | 1 | `inkahar`, `fkuruthl` |
-| User Management | 2FA system | Minor | 1 | `fkuruthl`, `inkahar` |
-| Artificial Intelligence | Voice/speech integration | Minor | 1 | `aymohamm` |
-| Cybersecurity | WAF/ModSecurity + HashiCorp Vault | Major | 2 | `inkahar`, `fkuruthl` |
-| Gaming and UX | Advanced 3D graphics (Three.js) | Major | 2 | `aymohamm`, `inkahar` |
-| DevOps | Backend as microservices | Major | 2 | `inkahar` |
+### Module Selection Rationale
+
+| Category | Decision |
+|:---|:---|
+| **Framework (Major, 2pts)** | React + Fastify/Express are industry-standard for scalable web applications with strong ecosystem support and active community |
+| **WebSockets (Major, 2pts)** | Real-time collaboration and notifications are core to the diary app's value; Socket.IO provides proven WebSocket abstraction with fallback support |
+| **User-to-User Interaction (Major, 2pts)** | Friend system and collaborative diary editing require robust messaging; essential feature for multi-user platform |
+| **Notification System (Minor, 1pt)** | Crucial for user engagement in real-time collaborative features; paginated API + WebSocket delivery provide both persistence and instant updates |
+| **Real-time Collaboration (Minor, 1pt)** | Distinguishes the product by enabling live co-authoring and presence awareness; implemented via Socket.IO rooms and permission guards |
+| **Standard Auth (Major, 2pts)** | JWT + password-based authentication is industry standard and baseline for any multi-user SaaS |
+| **OAuth 2.0 (Minor, 1pt)** | Reduces user friction with single-sign-on while delegating credential management to trusted provider (Google) |
+| **2FA System (Minor, 1pt)** | Elevates security posture for user accounts; essential given sensitive nature of diary data |
+| **Voice Integration (Minor, 1pt)** | Differentiates UX by allowing voice-based diary entries in 3D world; engaging alternative to text-only input |
+| **WAF + Vault (Major, 2pts)** | Defense-in-depth security approach: WAF blocks network attacks (SQL injection, XSS); Vault centralizes secret management per 42 curriculum expectations |
+| **3D Graphics (Major, 2pts)** | Three.js ecosystem enables immersive diary interaction in a virtual space; aligns with 42 transcendence theme |
+| **Microservices (Major, 2pts)** | Separates concerns (auth/diary/realtime), enables parallel team development, improves scalability and maintainability |
+
+### Module Implementation Details
+
+| Category | Module | Type | Pts | Owner(s) | Implementation |
+|:---|:---|:---:|:---:|:---|:---|
+| Web | Framework for frontend and backend | Major | 2 | All team | React 19 + Vite for frontend; Fastify/Express patterns for backend microservices; unified Node.js runtime |
+| Web | Real-time features via WebSockets | Major | 2 | `smuneer`, `inkahar` | Socket.IO with rooms, custom event handlers, and authenticated WebSocket proxy at API gateway |
+| Web | User-to-user interaction | Major | 2 | `smuneer`, `aymohamm` | Friend request/acceptance/decline REST API, collaborator invitations, presence-aware messaging |
+| Web | Complete notification system | Minor | 1 | `smuneer`, `inkahar` | Persistent PostgreSQL table, REST pagination, real-time WebSocket delivery, unread count tracking |
+| Web | Real-time collaborative features | Minor | 1 | `smuneer`, `inkahar`, `aymohamm` | Socket.IO rooms for diary sessions, role-based permission checks, live presence for active editors |
+| User Management | Standard auth and user management | Major | 2 | `fkuruthl`, `inkahar`, `aymohamm` | JWT token issuance, Bcrypt password hashing, user profile endpoints, session management |
+| User Management | Remote authentication (OAuth 2.0) | Minor | 1 | `fkuruthl`, `aymohamm` | Google OAuth flow integration, account linking, token refresh lifecycle |
+| User Management | 2FA system | Minor | 1 | `fkuruthl`, `inkahar` | Email-based OTP codes, recovery codes, 2-minute expiry, resend functionality |
+| Artificial Intelligence | Voice/speech integration | Minor | 1 | `aymohamm` | Browser Speech-to-Text API integration for voice diary entries in 3D world |
+| Cybersecurity | WAF/ModSecurity + HashiCorp Vault | Major | 2 | `inkahar`, `fkuruthl` | OWASP ModSecurity CRS at Nginx, route-level rule tuning, Vault server-mode secret injection |
+| Gaming and UX | Advanced 3D graphics (Three.js) | Major | 2 | `aymohamm`, `inkahar` | Three.js scene with @react-three/fiber, physics via @react-three/rapier, interactive diary access portal |
+| DevOps | Backend as microservices | Major | 2 | `inkahar` | Four independent services (auth/diary/realtime/gateway), Docker Compose orchestration, service discovery via internal DNS |
 
 ---
 
@@ -269,7 +289,7 @@ WAF (Socket.IO)  →  realtime-service
 ---
 
 <details>
-<summary><strong>🔐 fkuruthl</strong> — PM · Tech Lead (Auth/Integration) · Full-stack Developer</summary>
+<summary><strong>🔐 fkuruthl</strong> — PM · Tech Lead (Auth-Service) · Full-stack Developer</summary>
 
 <br>
 
@@ -277,12 +297,14 @@ WAF (Socket.IO)  →  realtime-service
 
 | Area | Responsibility |
 |:---|:---|
-| 📋 Project Management | Sprint planning, task tracking, team coordination, backlog management |
-| 🔐 Auth Security | Rate limiting, password policy, 2FA implementation |
+| 📋 Project Management | Sprint planning, task tracking, team coordination, backlog management, roadmap alignment |
+| 🏗️ Auth-Service Architecture | Full ownership of auth microservice design, endpoints, and security controls |
+| 🔐 Auth Security | Rate limiting, password policy, 2FA implementation, JWT lifecycle |
 | 🔑 Password Management | Bcrypt hashing + salting, password reset flows, policy validation |
 | 📧 2FA System | Code generation, expiry, recovery codes, email delivery |
-| 🛡️ Security Hardening | Input validation, error handling, duplicate detection |
-| 📚 Documentation | README, technical guides, validation reports |
+| 👤 User Management | User profile endpoints, user search, account management |
+| 🛡️ Security Hardening | Input validation, error handling, duplicate detection, security headers |
+| 📚 Documentation | README, technical guides, validation reports, API documentation |
 
 #### 🧰 Stack & Implementations
 
@@ -292,6 +314,16 @@ WAF (Socket.IO)  →  realtime-service
 - Backlog prioritization and roadmap planning
 - Regular standup facilitation and blockers tracking
 - Cross-functional team synchronization across auth, backend, and frontend domains
+- Sprint retrospectives and process improvement tracking
+
+**Auth-Service Implementation**
+- Complete microservice architecture: controllers, routes, middleware, utilities
+- Database schema design for users, OAuth tokens, 2FA recovery codes, password reset tokens
+- Express/Fastify integration patterns with proper error handling and validation
+- Bcrypt integration with secure password hashing and comparison
+- Email service integration for password reset and 2FA code delivery
+- Middleware stack for request validation, rate limiting, and authentication
+- JWT token generation and secret management via Vault integration
 
 **Auth Security & Rate Limiting**
 - In-memory rate limiter for auth endpoints:
@@ -327,14 +359,19 @@ WAF (Socket.IO)  →  realtime-service
   - Notion workspace with runbooks, decision logs, and technical documentation
   - Sprint retrospectives and process improvements
   - Stakeholder communication and progress tracking
+  - End-to-end project tracking across all four team members and three services
   
-- **Auth Implementation:**
-  - Rate limiting across all auth endpoints with sliding window algorithm
-  - Password policy enforcement at both frontend and backend
-  - Complete 2FA lifecycle: enable → verify → disable + recovery codes
-  - Secure password reset with token expiry and email validation
-  - Duplicate user detection with specific error differentiation
-  - Cross-service auth/security coordination with inkahar
+- **Auth-Service Architecture & Implementation:**
+  - Designed and implemented complete auth microservice with controllers, routes, middleware
+  - Built database schema for user accounts, OAuth tokens, 2FA codes, and password resets
+  - Integrated Bcrypt for secure password hashing with configurable salt rounds
+  - Implemented rate limiting across all auth endpoints with sliding window algorithm
+  - Configured password policy validation (8+ chars, uppercase, lowercase, number, special char)
+  - Built complete 2FA lifecycle: enable → verify → disable + recovery codes
+  - Implemented secure password reset with token expiry and email validation
+  - Created duplicate user detection with specific error differentiation (email vs username)
+  - Integrated email service for 2FA and password reset notifications
+  - Coordinated auth service integration with gateway, Vault, and frontend flows
 
 #### ⚡ Engineering Challenges Solved
 
@@ -468,13 +505,8 @@ make fclean    # full clean — also removes generated certs
 ## ⚠️ Known Limitations
 
 - Vault is not running with `-dev`; it runs in server mode, but still has local-only constraints (single-node file storage, local init material, and HTTP listener without TLS inside Docker network)
-- Local `.env` may include sensitive values — rotate and externalize for any shared or production environment
 - WAF tuning is optimized for this app's payload profile and may require recalibration if the API changes
 
 ---
-
-<div align="center">
-
-*Built with ☕ at 42 Abu Dhabi*
 
 </div>

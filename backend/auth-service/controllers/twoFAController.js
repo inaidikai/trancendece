@@ -32,44 +32,38 @@ const enable2FA = async (req, res) => {
   // Get user info
   const userQuery = 'SELECT email, username FROM users WHERE id = $1';
   
-  db.get(userQuery, [userId], async (err, user) => {
-    if (err) {
-      return res.status(500).json({ error: 'Database error' });
-    }
-
+  try {
+    const user = await db.get(userQuery, [userId]);
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
 
     // Enable 2FA flag
     const query = 'UPDATE users SET is_2fa_enabled = true WHERE id = $1';
+    await db.run(query, [userId]);
 
-    db.run(query, [userId], async (err) => {
-      if (err) {
-        return res.status(500).json({ error: 'Database error' });
-      }
-
-      try {
-        const recoveryCodes = await generateRecoveryCodes(userId);
-        res.json({
-          message: '2FA enabled successfully',
-          instructions: 'Next time you login, a 6-digit code will be sent to your email',
-          recovery_codes: recoveryCodes,
-        });
-      } catch (recoveryErr) {
-        console.error('Recovery code generation error:', recoveryErr);
-        res.json({
-          message: '2FA enabled successfully',
-          instructions: 'Next time you login, a 6-digit code will be sent to your email',
-          recovery_codes: [],
-        });
-      }
-    });
-  });
+    try {
+      const recoveryCodes = await generateRecoveryCodes(userId);
+      return res.json({
+        message: '2FA enabled successfully',
+        instructions: 'Next time you login, a 6-digit code will be sent to your email',
+        recovery_codes: recoveryCodes,
+      });
+    } catch (recoveryErr) {
+      console.error('Recovery code generation error:', recoveryErr);
+      return res.json({
+        message: '2FA enabled successfully',
+        instructions: 'Next time you login, a 6-digit code will be sent to your email',
+        recovery_codes: [],
+      });
+    }
+  } catch {
+    return res.status(500).json({ error: 'Database error' });
+  }
 };
 
 // Disable 2FA
-const disable2FA = (req, res) => {
+const disable2FA = async (req, res) => {
   const userId = req.user.userId || req.user.id;
   const { password } = req.body;
 
@@ -79,11 +73,8 @@ const disable2FA = (req, res) => {
 
   // Verify password first
   const getUserQuery = 'SELECT password_hash FROM users WHERE id = $1';
-  db.get(getUserQuery, [userId], async (err, user) => {
-    if (err) {
-      return res.status(500).json({ error: 'Database error' });
-    }
-
+  try {
+    const user = await db.get(getUserQuery, [userId]);
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
@@ -96,22 +87,18 @@ const disable2FA = (req, res) => {
       }
 
       const query = 'UPDATE users SET is_2fa_enabled = false, two_fa_code = NULL, two_fa_code_expires = NULL WHERE id = $1';
-
-      db.run(query, [userId], (err) => {
-        if (err) {
-          return res.status(500).json({ error: 'Database error' });
-        }
-
-        res.json({ message: '2FA disabled' });
-      });
+      await db.run(query, [userId]);
+      return res.json({ message: '2FA disabled' });
     } catch (err) {
-      res.status(500).json({ error: 'Error disabling 2FA' });
+      return res.status(500).json({ error: 'Error disabling 2FA' });
     }
-  });
+  } catch {
+    return res.status(500).json({ error: 'Database error' });
+  }
 };
 
 // Verify 2FA code with auth middleware (for profile/settings page)
-const verify2FA = (req, res) => {
+const verify2FA = async (req, res) => {
   const userId = req.user.userId || req.user.id;
   const { code } = req.body;
 
@@ -121,11 +108,8 @@ const verify2FA = (req, res) => {
 
   const query = 'SELECT two_fa_code, two_fa_code_expires FROM users WHERE id = $1';
 
-  db.get(query, [userId], (err, user) => {
-    if (err) {
-      return res.status(500).json({ error: 'Database error' });
-    }
-
+  try {
+    const user = await db.get(query, [userId]);
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
@@ -146,12 +130,14 @@ const verify2FA = (req, res) => {
 
     // Clear the code after successful verification
     const clearQuery = 'UPDATE users SET two_fa_code = NULL, two_fa_code_expires = NULL WHERE id = $1';
-    db.run(clearQuery, [userId], (err) => {
-      if (err) console.error('Error clearing 2FA code:', err);
+    db.run(clearQuery, [userId]).catch((err) => {
+      console.error('Error clearing 2FA code:', err);
     });
 
-    res.json({ message: '2FA verified successfully' });
-  });
+    return res.json({ message: '2FA verified successfully' });
+  } catch {
+    return res.status(500).json({ error: 'Database error' });
+  }
 };
 
 // Resend 2FA code
@@ -160,11 +146,8 @@ const resend2FACode = async (req, res) => {
 
   const query = 'SELECT email, full_name, username FROM users WHERE id = $1';
 
-  db.get(query, [userId], async (err, user) => {
-    if (err) {
-      return res.status(500).json({ error: 'Database error' });
-    }
-
+  try {
+    const user = await db.get(query, [userId]);
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
@@ -175,24 +158,22 @@ const resend2FACode = async (req, res) => {
 
     // Save code to database
     const updateQuery = 'UPDATE users SET two_fa_code = $1, two_fa_code_expires = $2 WHERE id = $3';
-    db.run(updateQuery, [code, expiresAt, userId], async (err) => {
-      if (err) {
-        console.error('Error saving 2FA code:', err);
-        return res.status(500).json({ error: 'Database error' });
-      }
+    await db.run(updateQuery, [code, expiresAt, userId]);
 
-      try {
-        const sent = await sendTwoFAEmail(user.email, code, user.full_name || user.username);
-        if (!sent) {
-          return res.status(500).json({ error: 'Failed to send 2FA email' });
-        }
-        res.json({ message: '2FA code resent to your email' });
-      } catch (emailError) {
-        console.error('Error sending 2FA email:', emailError);
-        res.status(500).json({ error: 'Failed to send 2FA email' });
+    try {
+      const sent = await sendTwoFAEmail(user.email, code, user.full_name || user.username);
+      if (!sent) {
+        return res.status(500).json({ error: 'Failed to send 2FA email' });
       }
-    });
-  });
+      return res.json({ message: '2FA code resent to your email' });
+    } catch (emailError) {
+      console.error('Error sending 2FA email:', emailError);
+      return res.status(500).json({ error: 'Failed to send 2FA email' });
+    }
+  } catch (err) {
+    console.error('Error saving 2FA code:', err);
+    return res.status(500).json({ error: 'Database error' });
+  }
 };
 
 // Regenerate recovery codes

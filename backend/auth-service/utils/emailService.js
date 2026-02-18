@@ -1,27 +1,34 @@
-const nodemailer = require('nodemailer');
-const { loadVaultSecrets } = require('../../shared/vault');
+const nodemailer = require('nodemailer'); //what is nodemailer and why we need it
+const { loadVaultSecrets } = require('../../shared/vault');//why
 
-async function getTransporter() {
-  if (!process.env.EMAIL_USER || !process.env.EMAIL_PASSWORD) {
-    try {
+async function getTransporter() { //explain this function and why we need it
+  if (!process.env.EMAIL_USER || !process.env.EMAIL_PASSWORD) 
+  {
+    try 
+    {
       await loadVaultSecrets({ logger: console });
-    } catch (error) {
+    } 
+    catch (error) 
+    {
       console.error('Vault reload for email failed:', error?.message || error);
     }
   }
 
-  return nodemailer.createTransport({
-    host: process.env.EMAIL_HOST || 'smtp.gmail.com',
-    port: Number(process.env.EMAIL_PORT || 587),
-    secure: process.env.EMAIL_SECURE === 'true',
-    auth: {
-      user: process.env.EMAIL_USER || 'your-email@gmail.com',
-      pass: process.env.EMAIL_PASSWORD || 'your-app-password',
+  return nodemailer.createTransport(
+  {
+    host: process.env.EMAIL_HOST || 'smtp.gmail.com', //what is host and why we need it and smtp
+    port: Number(process.env.EMAIL_PORT || 587),  //why we need port and why 587
+    secure: process.env.EMAIL_SECURE === 'true', //what is secure and why we need it
+    auth: 
+    {
+      user: process.env.EMAIL_USER || 'your-email@gmail.com',//
+      pass: process.env.EMAIL_PASSWORD || 'your-app-password',//why we need meil user and passw
     },
   });
 }
 
-function baseMailOptions(to, subject) {
+function baseMailOptions(to, subject) //explain this function and why we need it with examples
+{
   return {
     from: process.env.EMAIL_FROM || 'Quillow <noreply@auth.com>',
     to,
@@ -30,8 +37,8 @@ function baseMailOptions(to, subject) {
   };
 }
 
-// Send password reset email
-const sendPasswordResetEmail = async (email, resetToken, userName) => {
+
+const sendPasswordResetEmail = async (email, resetToken, userName) => { //expl this funtion
   try {
     const transporter = await getTransporter();
     const resetLink = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/reset-password?token=${resetToken}`;
@@ -41,7 +48,7 @@ const sendPasswordResetEmail = async (email, resetToken, userName) => {
       text: `Hi ${userName || email},
 
 You requested a password reset for your Quillow account.
-Reset your password using this link: ${resetLink}
+Reset your password using this link: ${resetLink} //wh ydollar sign and curly braces and what is resetLink
 
 This link expires in 1 hour.
 If you did not request this, you can ignore this email.
@@ -53,7 +60,7 @@ Quillow Team`,
         <p>You requested a password reset. Click the link below to reset your password:</p>
         <p><a href="${resetLink}" style="background-color: #4CAF50; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">Reset Password</a></p>
         <p>This link expires in 1 hour.</p>
-        <p>If you didn't request this, please ignore this email.</p>
+        <p>If you didn't request this, please ignore this email.</p> //why lines repeating
         <p>Best regards,<br/>Quillow Team</p>
       `,
     };
@@ -223,3 +230,5 @@ module.exports = {
   sendTwoFAEmail,
   testEmailConfig,
 };
+
+//co,e back to this late

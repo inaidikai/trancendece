@@ -1,12 +1,5 @@
 const db = require('../config/database');
-const {
-  hashPassword,
-  comparePassword,
-  generateToken,
-  generateId,
-  verifyToken,
-  validatePasswordPolicy,
-} = require('../utils/auth');
+const {hashPassword, comparePassword, generateToken, generateId, verifyToken, validatePasswordPolicy,} = require('../utils/auth');
 const { sendWelcomeEmail, sendTwoFAEmail } = require('../utils/emailService');
 const { loadVaultSecrets } = require('../../shared/vault');
 
@@ -14,16 +7,18 @@ const TWO_FA_CODE_EXPIRY_MS = 2 * 60 * 1000;
 const OAUTH_STATE_TTL_MS = Number(process.env.OAUTH_STATE_TTL_MS || 10 * 60 * 1000);
 
 const ensureGoogleOAuthSecrets = async () => {
-  if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) return;
-  try {
+  if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) return; 
+  try 
+  {
     await loadVaultSecrets({ logger: console });
-  } catch (error) {
+  } 
+  catch (error) 
+  {
     console.error('Vault reload for Google OAuth failed:', error?.message || error);
   }
 };
 
 const buildPending2FASubject = (userId) => `${userId}_2fa_pending`;
-
 const isValidPending2FAToken = (userId, tempToken) => {
   if (!userId || !tempToken) return false;
   const decoded = verifyToken(tempToken);
@@ -31,28 +26,17 @@ const isValidPending2FAToken = (userId, tempToken) => {
   return String(decoded.userId) === buildPending2FASubject(userId);
 };
 
-const issueAndSendTwoFACode = (user, callback) => {
+const issueAndSendTwoFACode = async (user) => {
   const code = Math.floor(100000 + Math.random() * 900000).toString();
   const expiresAt = new Date(Date.now() + TWO_FA_CODE_EXPIRY_MS);
   const updateQuery = 'UPDATE users SET two_fa_code = $1, two_fa_code_expires = $2 WHERE id = $3';
 
-  db.run(updateQuery, [code, expiresAt, user.id], async (updateErr) => {
-    if (updateErr) {
-      callback(updateErr);
-      return;
-    }
-
-    try {
-      const sent = await sendTwoFAEmail(user.email, code, user.full_name || user.username);
-      if (!sent) {
-        callback(new Error('Failed to send 2FA code email'));
-        return;
-      }
-      callback(null);
-    } catch (emailErr) {
-      callback(emailErr);
-    }
-  });
+  await db.run(updateQuery, [code, expiresAt, user.id]);
+  const sent = await sendTwoFAEmail(user.email, code, user.full_name || user.username);
+  if (!sent) 
+  {
+    throw new Error('Failed to send 2FA code email');
+  }
 };
 
 const consumeRecoveryCode = async (userId, code) => {
@@ -72,12 +56,12 @@ const consumeRecoveryCode = async (userId, code) => {
   return false;
 };
 
-// Register new user
-const register = (req, res) => {
+const register = async (req, res) => { // Register new user
   const { email, username, password, full_name } = req.body;
 
-  // Validation
-  if (!email || !username || !password) {
+
+  if (!email || !username || !password)  // Validation
+  {
     return res.status(400).json({ error: 'Email, username, and password are required' });
   }
 
@@ -91,48 +75,47 @@ const register = (req, res) => {
 
   const userId = generateId();
 
-  hashPassword(password).then((hashedPassword) => {
+  try {
+    const hashedPassword = await hashPassword(password);
     const query = `
       INSERT INTO users (id, email, username, password_hash, full_name)
       VALUES ($1, $2, $3, $4, $5)
     `;
 
-    db.run(query, [userId, email.toLowerCase(), username, hashedPassword, full_name || null], function (err) {
-      if (err) {
-        console.error('Registration error:', err.message);
-        const errMsg = err.message.toLowerCase();
-        if (errMsg.includes('unique') && errMsg.includes('email')) {
-          return res.status(409).json({ error: 'Email already in use' });
-        }
-        if (errMsg.includes('unique') && errMsg.includes('username')) {
-          return res.status(409).json({ error: 'Username already in use' });
-        }
-        if (errMsg.includes('unique')) {
-          return res.status(409).json({ error: 'Email or username already exists' });
-        }
-        return res.status(500).json({ error: 'Database error', details: err.message });
-      }
+    await db.run(query, [userId, email.toLowerCase(), username, hashedPassword, full_name || null]);
 
-      // Send welcome email
-      sendWelcomeEmail(email, full_name || username).catch((welcomeErr) => {
-        console.error('Failed to send welcome email:', welcomeErr);
-        // Don't fail registration if email fails
-      });
-
-      const token = generateToken(userId);
-      res.status(201).json({
-        message: 'User registered successfully',
-        user: { id: userId, email, username, full_name },
-        token,
-      });
+    // Send welcome email
+    sendWelcomeEmail(email, full_name || username).catch((welcomeErr) => {
+      console.error('Failed to send welcome email:', welcomeErr);
+      // Don't fail registration if email fails
     });
-  }).catch(() => {
-    res.status(500).json({ error: 'Error hashing password' });
-  });
+
+    const token = generateToken(userId);
+    return res.status(201).json({
+      message: 'User registered successfully',
+      user: { id: userId, email, username, full_name },
+      token,
+    });
+  } catch (err) {
+    if (err?.message) {
+      console.error('Registration error:', err.message);
+      const errMsg = err.message.toLowerCase();
+      if (errMsg.includes('unique') && errMsg.includes('email')) {
+        return res.status(409).json({ error: 'Email already in use' });
+      }
+      if (errMsg.includes('unique') && errMsg.includes('username')) {
+        return res.status(409).json({ error: 'Username already in use' });
+      }
+      if (errMsg.includes('unique')) {
+        return res.status(409).json({ error: 'Email or username already exists' });
+      }
+    }
+    return res.status(500).json({ error: 'Database error', details: err?.message || 'Unknown error' });
+  }
 };
 
 // Login user
-const login = (req, res) => {
+const login = async (req, res) => {
   const { email, password } = req.body;
 
   if (!email || !password) {
@@ -141,85 +124,76 @@ const login = (req, res) => {
 
   const query = 'SELECT * FROM users WHERE email = $1';
 
-  db.get(query, [email.toLowerCase()], async (err, user) => {
-    if (err) {
-      return res.status(500).json({ error: 'Database error' });
-    }
-
+  try {
+    const user = await db.get(query, [email.toLowerCase()]);
     if (!user) {
       return res.status(401).json({ error: 'Invalid email or password' });
     }
 
-    try {
-      const passwordMatch = await comparePassword(password, user.password_hash);
+    const passwordMatch = await comparePassword(password, user.password_hash);
 
-      if (!passwordMatch) {
-        return res.status(401).json({ error: 'Invalid email or password' });
-      }
-
-      // Check if 2FA is enabled
-      if (user.is_2fa_enabled) {
-        issueAndSendTwoFACode(user, (twoFAErr) => {
-          if (twoFAErr) {
-            console.error('2FA login issue:', twoFAErr);
-            return res.status(500).json({ error: 'Failed to send 2FA code' });
-          }
-
-          const tempToken = generateToken(buildPending2FASubject(user.id));
-          return res.json({
-            message: '2FA code sent to your email',
-            requires_2fa: true,
-            temp_token: tempToken,
-            user_id: user.id,
-          });
-        });
-        return;
-      }
-
-      const token = generateToken(user.id);
-      res.json({
-        message: 'Login successful',
-        user: {
-          id: user.id,
-          email: user.email,
-          username: user.username,
-          full_name: user.full_name,
-          avatar_url: user.avatar_url,
-        },
-        token,
-      });
-    } catch {
-      res.status(500).json({ error: 'Error during login' });
+    if (!passwordMatch) {
+      return res.status(401).json({ error: 'Invalid email or password' });
     }
-  });
+
+    // Check if 2FA is enabled
+    if (user.is_2fa_enabled) { //
+      try {
+        await issueAndSendTwoFACode(user);
+      } catch (twoFAErr) {
+        console.error('2FA login issue:', twoFAErr);
+        return res.status(500).json({ error: 'Failed to send 2FA code' });
+      }
+
+      const tempToken = generateToken(buildPending2FASubject(user.id));//
+      return res.json({
+        message: '2FA code sent to your email',
+        requires_2fa: true,
+        temp_token: tempToken,
+        user_id: user.id,
+      });
+    }
+
+    const token = generateToken(user.id);
+    return res.json({
+      message: 'Login successful',
+      user: {
+        id: user.id,
+        email: user.email,
+        username: user.username,
+        full_name: user.full_name,
+        avatar_url: user.avatar_url,
+      },
+      token,
+    });
+  } catch {
+    return res.status(500).json({ error: 'Error during login' });
+  }
 };
 
-// Get current user (me endpoint)
-const getMe = (req, res) => {
+const getMe = async (req, res) => {
   const userId = req.user.userId;
 
   const query = 'SELECT id, email, username, full_name, avatar_url, bio, is_2fa_enabled, created_at, updated_at FROM users WHERE id = $1';
 
-  db.get(query, [userId], (err, user) => {
-    if (err) {
-      return res.status(500).json({ error: 'Database error' });
-    }
-
+  try {
+    const user = await db.get(query, [userId]);
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
-
-    res.json(user);
-  });
+    return res.json(user);
+  } catch {
+    return res.status(500).json({ error: 'Database error' });
+  }
 };
 
-// Logout (stateless JWT)
+
 const logout = (req, res) => {
   res.json({ message: 'Logout successful' });
 };
 
-// Verify 2FA during login
-const verify2FALogin = (req, res) => {
+
+const verify2FALogin = async (req, res) => { // Verify 2FA during login
   const { user_id, code, temp_token, tempToken } = req.body;
   const pendingToken = temp_token || tempToken;
 
@@ -233,17 +207,14 @@ const verify2FALogin = (req, res) => {
 
   const query = 'SELECT two_fa_code, two_fa_code_expires, email, username, full_name, avatar_url FROM users WHERE id = $1 AND is_2fa_enabled = true';
 
-  db.get(query, [user_id], (err, user) => {
-    if (err) {
-      return res.status(500).json({ error: 'Database error' });
-    }
-
+  try {
+    const user = await db.get(query, [user_id]);
     if (!user) {
       return res.status(404).json({ error: '2FA not enabled for this user' });
     }
 
-    // Check if code exists and is not expired
-    if (!user.two_fa_code || !user.two_fa_code_expires) {
+    
+    if (!user.two_fa_code || !user.two_fa_code_expires) { // Check if code exists and is not expired
       return res.status(400).json({ error: 'No 2FA code found. Please login again.' });
     }
 
@@ -251,49 +222,47 @@ const verify2FALogin = (req, res) => {
       return res.status(400).json({ error: '2FA code has expired. Please login again.' });
     }
 
-    // Verify code matches (email OTP or recovery code)
-    if (String(code) !== String(user.two_fa_code)) {
-      consumeRecoveryCode(user_id, String(code))
-        .then((used) => {
-          if (!used) {
-            return res.status(401).json({ error: 'Invalid 2FA code' });
-          }
+    
+    if (String(code) !== String(user.two_fa_code)) { // Verify code matches (email OTP or recovery code)
+      try {
+        const used = await consumeRecoveryCode(user_id, String(code));
+        if (!used) {
+          return res.status(401).json({ error: 'Invalid 2FA code' });
+        }
 
-          const clearQuery = 'UPDATE users SET two_fa_code = NULL, two_fa_code_expires = NULL WHERE id = $1';
-          db.run(clearQuery, [user_id], (clearErr) => {
-            if (clearErr) console.error('Error clearing 2FA code:', clearErr);
-          });
-
-          const token = generateToken(user_id);
-          return res.json({
-            message: 'Login successful',
-            user: {
-              id: user_id,
-              email: user.email,
-              username: user.username,
-              full_name: user.full_name,
-              avatar_url: user.avatar_url,
-            },
-            token,
-            recovery_used: true,
-          });
-        })
-        .catch((err) => {
-          console.error('Recovery code check failed:', err);
-          return res.status(500).json({ error: 'Error during 2FA verification' });
+        const clearQuery = 'UPDATE users SET two_fa_code = NULL, two_fa_code_expires = NULL WHERE id = $1';
+        db.run(clearQuery, [user_id]).catch((clearErr) => {
+          console.error('Error clearing 2FA code:', clearErr);
         });
-      return;
+
+        const token = generateToken(user_id);
+        return res.json({
+          message: 'Login successful',
+          user: {
+            id: user_id,
+            email: user.email,
+            username: user.username,
+            full_name: user.full_name,
+            avatar_url: user.avatar_url,
+          },
+          token,
+          recovery_used: true,
+        });
+      } catch (err) {
+        console.error('Recovery code check failed:', err);
+        return res.status(500).json({ error: 'Error during 2FA verification' });
+      }
     }
 
     // Clear the code after successful verification
     const clearQuery = 'UPDATE users SET two_fa_code = NULL, two_fa_code_expires = NULL WHERE id = $1';
-    db.run(clearQuery, [user_id], (clearErr) => {
-      if (clearErr) console.error('Error clearing 2FA code:', clearErr);
+    db.run(clearQuery, [user_id]).catch((clearErr) => {
+      console.error('Error clearing 2FA code:', clearErr);
     });
 
     // Generate token after successful 2FA
     const token = generateToken(user_id);
-    res.json({
+    return res.json({
       message: 'Login successful',
       user: {
         id: user_id,
@@ -304,11 +273,13 @@ const verify2FALogin = (req, res) => {
       },
       token,
     });
-  });
+  } catch {
+    return res.status(500).json({ error: 'Database error' });
+  }
 };
 
 // Resend 2FA code during login challenge
-const resend2FALogin = (req, res) => {
+const resend2FALogin = async (req, res) => {
   const { user_id, temp_token, tempToken } = req.body;
   const pendingToken = temp_token || tempToken;
 
@@ -321,28 +292,27 @@ const resend2FALogin = (req, res) => {
   }
 
   const query = 'SELECT id, email, username, full_name, is_2fa_enabled FROM users WHERE id = $1';
-  db.get(query, [user_id], (err, user) => {
-    if (err) {
-      return res.status(500).json({ error: 'Database error' });
-    }
-
+  try {
+    const user = await db.get(query, [user_id]);
     if (!user || !user.is_2fa_enabled) {
       return res.status(404).json({ error: '2FA not enabled for this user' });
     }
 
-    issueAndSendTwoFACode(user, (twoFAErr) => {
-      if (twoFAErr) {
-        console.error('Resend 2FA issue:', twoFAErr);
-        return res.status(500).json({ error: 'Failed to resend 2FA code' });
-      }
+    try {
+      await issueAndSendTwoFACode(user);
+    } catch (twoFAErr) {
+      console.error('Resend 2FA issue:', twoFAErr);
+      return res.status(500).json({ error: 'Failed to resend 2FA code' });
+    }
 
-      res.json({ message: '2FA code resent to your email' });
-    });
-  });
+    return res.json({ message: '2FA code resent to your email' });
+  } catch {
+    return res.status(500).json({ error: 'Database error' });
+  }
 };
 
 // Verify token (for other services) - Internal API
-const verifyTokenForServices = (req, res) => {
+const verifyTokenForServices = async (req, res) => {
   const { token } = req.body;
 
   if (!token) {
@@ -357,16 +327,13 @@ const verifyTokenForServices = (req, res) => {
 
   // Get user info
   const query = 'SELECT id, email, username, full_name, avatar_url FROM users WHERE id = $1';
-  db.get(query, [decoded.userId], (err, user) => {
-    if (err) {
-      return res.status(500).json({ valid: false, error: 'Database error' });
-    }
-
+  try {
+    const user = await db.get(query, [decoded.userId]);
     if (!user) {
       return res.status(404).json({ valid: false, error: 'User not found' });
     }
 
-    res.json({
+    return res.json({
       valid: true,
       user: {
         id: user.id,
@@ -376,11 +343,13 @@ const verifyTokenForServices = (req, res) => {
         avatar_url: user.avatar_url,
       },
     });
-  });
+  } catch {
+    return res.status(500).json({ valid: false, error: 'Database error' });
+  }
 };
 
 // Get user by ID (for other services) - Internal API
-const getUserById = (req, res) => {
+const getUserById = async (req, res) => {
   const { id } = req.params;
 
   if (!id) {
@@ -388,17 +357,16 @@ const getUserById = (req, res) => {
   }
 
   const query = 'SELECT id, email, username, full_name, avatar_url, bio, created_at FROM users WHERE id = $1';
-  db.get(query, [id], (err, user) => {
-    if (err) {
-      return res.status(500).json({ error: 'Database error' });
-    }
-
+  try {
+    const user = await db.get(query, [id]);
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    res.json({ user });
-  });
+    return res.json({ user });
+  } catch {
+    return res.status(500).json({ error: 'Database error' });
+  }
 };
 
 // ==================== GOOGLE OAUTH FUNCTIONS ====================
@@ -422,31 +390,30 @@ const googleAuthInit = async (req, res) => {
   const expiresAt = new Date(Date.now() + OAUTH_STATE_TTL_MS);
 
   // Persist state for validation on callback
-  db.run(
-    'INSERT INTO oauth_states (state, provider, expires_at) VALUES ($1, $2, $3)',
-    [state, 'google', expiresAt],
-    (err) => {
-      if (err) {
-        console.error('OAuth state insert error:', err.message || err);
-        return res.status(500).json({ error: 'Failed to start OAuth flow' });
-      }
+  try {
+    await db.run(
+      'INSERT INTO oauth_states (state, provider, expires_at) VALUES ($1, $2, $3)',
+      [state, 'google', expiresAt]
+    );
+  } catch (err) {
+    console.error('OAuth state insert error:', err?.message || err);
+    return res.status(500).json({ error: 'Failed to start OAuth flow' });
+  }
 
-      const googleAuthUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
-      googleAuthUrl.searchParams.append('client_id', clientId);
-      googleAuthUrl.searchParams.append('redirect_uri', redirectUri);
-      googleAuthUrl.searchParams.append('response_type', 'code');
-      googleAuthUrl.searchParams.append('scope', 'openid email profile');
-      googleAuthUrl.searchParams.append('state', state);
-      googleAuthUrl.searchParams.append('access_type', 'offline');
-      googleAuthUrl.searchParams.append('prompt', 'consent');
+  const googleAuthUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
+  googleAuthUrl.searchParams.append('client_id', clientId);
+  googleAuthUrl.searchParams.append('redirect_uri', redirectUri);
+  googleAuthUrl.searchParams.append('response_type', 'code');
+  googleAuthUrl.searchParams.append('scope', 'openid email profile');
+  googleAuthUrl.searchParams.append('state', state);
+  googleAuthUrl.searchParams.append('access_type', 'offline');
+  googleAuthUrl.searchParams.append('prompt', 'consent');
 
-      return res.json({
-        message: 'Google OAuth URL generated',
-        authUrl: googleAuthUrl.toString(),
-        state: state
-      });
-    }
-  );
+  return res.json({
+    message: 'Google OAuth URL generated',
+    authUrl: googleAuthUrl.toString(),
+    state: state
+  });
 };
 
 /**
@@ -508,83 +475,78 @@ const googleAuthCallback = async (req, res) => {
 
     // Step 3: Check if user exists in our database
     const query = 'SELECT * FROM users WHERE email = $1 OR google_id = $2';
-    db.get(query, [email.toLowerCase(), googleId], async (err, user) => {
-      if (err) {
-        return res.status(500).json({ error: 'Database error' });
-      }
+    const user = await db.get(query, [email.toLowerCase(), googleId]);
 
-      // Step 4a: User exists - update OAuth info and login
-      if (user) {
-        // Update Google OAuth info
-        const updateQuery = `
+    // Step 4a: User exists - update OAuth info and login
+    if (user) {
+      // Update Google OAuth info
+      const updateQuery = `
           UPDATE users 
           SET google_id = $1, oauth_provider = 'google', updated_at = NOW()
           WHERE id = $2
         `;
-        db.run(updateQuery, [googleId, user.id], (updateErr) => {
-          if (updateErr) {
-            console.error('Update error:', updateErr.message);
-            return res.status(500).json({ error: 'Database error during update' });
-          }
-
-          // Generate JWT token
-          const token = generateToken(user.id);
-          res.json({
-            message: 'Login successful via Google',
-            user: {
-              id: user.id,
-              email: user.email,
-              username: user.username,
-              full_name: user.full_name,
-              avatar_url: user.avatar_url || picture,
-            },
-            token,
-            isNewUser: false
-          });
-        });
-        return;
+      try {
+        await db.run(updateQuery, [googleId, user.id]);
+      } catch (updateErr) {
+        console.error('Update error:', updateErr.message);
+        return res.status(500).json({ error: 'Database error during update' });
       }
 
-      // Step 4b: New user - create account
-      const userId = generateId();
-      const username = email.split('@')[0] + '_' + Math.random().toString(36).substr(2, 5);
+      // Generate JWT token
+      const token = generateToken(user.id);
+      return res.json({
+        message: 'Login successful via Google',
+        user: {
+          id: user.id,
+          email: user.email,
+          username: user.username,
+          full_name: user.full_name,
+          avatar_url: user.avatar_url || picture,
+        },
+        token,
+        isNewUser: false
+      });
+    }
 
-      const insertQuery = `
+    // Step 4b: New user - create account
+    const userId = generateId();
+    const username = email.split('@')[0] + '_' + Math.random().toString(36).substr(2, 5);
+
+    const insertQuery = `
         INSERT INTO users (id, email, username, full_name, avatar_url, google_id, oauth_provider, password_hash, created_at)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
       `;
 
-      // Google OAuth users don't have passwords initially
-      db.run(insertQuery, [userId, email.toLowerCase(), username, name, picture, googleId, 'google', null], (insertErr) => {
-        if (insertErr) {
-          console.error('Insert error:', insertErr.message);
-          if (insertErr.message.includes('UNIQUE')) {
-            return res.status(409).json({ error: 'Email or username already exists' });
-          }
-          return res.status(500).json({ error: 'Database error during user creation' });
-        }
+    // Google OAuth users don't have passwords initially
+    try {
+      await db.run(insertQuery, [userId, email.toLowerCase(), username, name, picture, googleId, 'google', null]);
+    } catch (insertErr) {
+      console.error('Insert error:', insertErr.message);
+      if (insertErr.message.includes('UNIQUE')) {
+        return res.status(409).json({ error: 'Email or username already exists' });
+      }
+      return res.status(500).json({ error: 'Database error during user creation' });
+    }
 
-        // Send welcome email for new OAuth users
-        sendWelcomeEmail(email, name || username).catch((welcomeErr) => {
-          console.error('Failed to send welcome email (OAuth):', welcomeErr);
-          // Don't fail OAuth signup if email fails
-        });
+    // Send welcome email for new OAuth users
+    sendWelcomeEmail(email, name || username).catch((welcomeErr) => {
+      console.error('Failed to send welcome email (OAuth):', welcomeErr);
+      // Don't fail OAuth signup if email fails
+    });
 
-        // Generate JWT token
-        const token = generateToken(userId);
-        res.status(201).json({
-          message: 'User created and logged in successfully via Google',
-          user: {
-            id: userId,
-            email: email.toLowerCase(),
-            username: username,
-            full_name: name,
-            avatar_url: picture,
-          },
-          token,
-          isNewUser: true
-        });
-      });
+    // Generate JWT token
+    const token = generateToken(userId);
+    return res.status(201).json({
+      message: 'User created and logged in successfully via Google',
+      user: {
+        id: userId,
+        email: email.toLowerCase(),
+        username: username,
+        full_name: name,
+        avatar_url: picture,
+      },
+      token,
+      isNewUser: true
     });
 
   } catch (error) {
@@ -615,7 +577,7 @@ const googleAuthRedirect = (req, res) => {
  * Link Google account to existing user
  * For authenticated users wanting to add Google login
  */
-const linkGoogleAccount = (req, res) => {
+const linkGoogleAccount = async (req, res) => {
   const userId = req.user.userId;
   const { googleId } = req.body;
 
@@ -629,14 +591,13 @@ const linkGoogleAccount = (req, res) => {
     WHERE id = $2
   `;
 
-  db.run(query, [googleId, userId], (err) => {
-    if (err) {
-      console.error('Link error:', err.message);
-      return res.status(500).json({ error: 'Failed to link Google account' });
-    }
-
-    res.json({ message: 'Google account linked successfully' });
-  });
+  try {
+    await db.run(query, [googleId, userId]);
+    return res.json({ message: 'Google account linked successfully' });
+  } catch (err) {
+    console.error('Link error:', err.message);
+    return res.status(500).json({ error: 'Failed to link Google account' });
+  }
 };
 
 module.exports = {

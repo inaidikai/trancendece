@@ -17,64 +17,39 @@ pool.on('error', (err) => {
   console.error('PostgreSQL pool error', err);
 });
 
-const run = (text, params, callback) => {
-  const args = Array.isArray(params) ? params : [];
-  const cb = typeof params === 'function' ? params : callback;
 
-  return pool
-    .query(text, args)
-    .then((result) => {
-      if (cb) {
-        cb.call({ changes: result.rowCount, lastID: result.rows?.[0]?.id }, null);
-      }
-      return result;
-    })
-    .catch((err) => {
-      if (cb) {
-        cb(err);
-        return null;
-      }
-      throw err;
-    });
+const run = async (text, params = []) => {
+  const args = Array.isArray(params) ? params : [];
+  try {
+    const result = await pool.query(text, args);
+    return {
+      changes: result.rowCount,
+      lastID: result.rows?.[0]?.id,
+      result,
+    };
+  } catch (err) {
+    throw err;
+  }
 };
 
-const get = (text, params, callback) => {
+const get = async (text, params = []) => {
   const args = Array.isArray(params) ? params : [];
-  const cb = typeof params === 'function' ? params : callback;
-
-  return pool
-    .query(text, args)
-    .then((result) => {
-      const row = result.rows[0] || null;
-      if (cb) cb(null, row);
-      return row;
-    })
-    .catch((err) => {
-      if (cb) {
-        cb(err);
-        return null;
-      }
-      throw err;
-    });
+  try {
+    const result = await pool.query(text, args);
+    return result.rows[0] || null;
+  } catch (err) {
+    throw err;
+  }
 };
 
-const all = (text, params, callback) => {
+const all = async (text, params = []) => {
   const args = Array.isArray(params) ? params : [];
-  const cb = typeof params === 'function' ? params : callback;
-
-  return pool
-    .query(text, args)
-    .then((result) => {
-      if (cb) cb(null, result.rows);
-      return result.rows;
-    })
-    .catch((err) => {
-      if (cb) {
-        cb(err);
-        return null;
-      }
-      throw err;
-    });
+  try {
+    const result = await pool.query(text, args);
+    return result.rows;
+  } catch (err) {
+    throw err;
+  }
 };
 
 module.exports = {

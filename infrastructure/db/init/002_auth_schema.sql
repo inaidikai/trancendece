@@ -12,7 +12,7 @@ CREATE TABLE IF NOT EXISTS oauth_tokens (
   provider VARCHAR(50) NOT NULL,
   access_token TEXT NOT NULL,
   refresh_token TEXT,
-  token_expires_at TIMESTAMP,
+  expires_at TIMESTAMP,
   created_at TIMESTAMP NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
