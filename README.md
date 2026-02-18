@@ -98,39 +98,151 @@ Quillow is a secure, social, and collaborative diary platform. Users can registe
 
 ## 🗃️ Database Schema
 
+The database is organised into **5 functional domains** across 4 migration files (`001_core_schema` → `002_auth_schema` → `003_backend_enforcement` → `004_relationships`).
+
+### Entity Relationship Diagram
+
 ```mermaid
 erDiagram
-  users ||--o{ friend_requests : sender_id
-  users ||--o{ friend_requests : receiver_id
-  users ||--o{ friends : user_id
-  users ||--o{ friends : friend_id
-  users ||--o{ diary_entries : owner_id
-  diary_entries ||--o{ collaborators : entry_id
-  users ||--o{ collaborators : user_id
-  users ||--o{ notifications : recipient_id
-  users ||--o{ notifications : sender_id
-  users ||--o{ oauth_tokens : user_id
-  users ||--o{ twofa_recovery_codes : user_id
-  users ||--o{ password_reset_tokens : user_id
-  users ||--o{ ws_connections : user_id
+  users ||--o{ friend_requests : "sender_id"
+  users ||--o{ friend_requests : "receiver_id"
+  users ||--o{ friends : "user_id"
+  users ||--o{ friends : "friend_id"
+  users ||--o{ diary_entries : "owner_id"
+  users ||--o{ collaborators : "user_id"
+  users ||--o{ collaborators : "invited_by"
+  users ||--o{ notifications : "recipient_id"
+  users ||--o{ notifications : "sender_id"
+  users ||--o{ oauth_tokens : "user_id"
+  users ||--o{ twofa_recovery_codes : "user_id"
+  users ||--o{ password_reset_tokens : "user_id"
+  users ||--o{ ws_connections : "user_id"
+  diary_entries ||--o{ collaborators : "entry_id"
+  diary_entries ||--o{ active_sessions : "entry_id"
+  users ||--o{ active_sessions : "user_id"
+
+  users {
+    varchar id PK
+    varchar username UK
+    varchar email UK
+    varchar password_hash
+    varchar google_id UK
+    varchar oauth_provider
+    boolean is_active
+    timestamp last_seen
+    timestamp created_at
+  }
+
+  diary_entries {
+    text id PK
+    varchar owner_id FK
+    varchar title
+    text content
+    text diary_type
+    boolean is_private
+    timestamp updated_at
+  }
+
+  collaborators {
+    varchar id PK
+    varchar entry_id FK
+    varchar user_id FK
+    varchar invited_by FK
+    varchar role
+    varchar status
+    timestamp invited_at
+    timestamp accepted_at
+  }
+
+  friend_requests {
+    varchar id PK
+    varchar sender_id FK
+    varchar receiver_id FK
+    varchar status
+    text message
+    timestamp created_at
+  }
+
+  friends {
+    text user_id FK
+    text friend_id FK
+    timestamp created_at
+  }
+
+  notifications {
+    text id PK
+    text recipient_id FK
+    text sender_id FK
+    text type
+    text entity_type
+    text entity_id
+    boolean is_read
+    boolean is_archived
+    jsonb metadata
+    timestamp created_at
+  }
 ```
 
-**Main tables:**
+### Table Reference
 
-| Table | Key Fields |
-|:---|:---|
-| `users` | `id (varchar PK)`, `username`, `email`, `password_hash`, `google_id`, `is_active`, timestamps |
-| `diary_entries` | `id (text PK)`, `owner_id`, `content`, `diary_type (private/collaborative)`, `is_private` |
-| `collaborators` | `id`, `entry_id`, `user_id`, `role (viewer/editor)`, `status` |
-| `friend_requests` | sender/receiver relationship with constrained `status` |
-| `friends` | bidirectional friendship links |
-| `notifications` | persisted notifications with `jsonb` metadata and read/archive states |
-| `oauth_tokens` / `password_reset_tokens` / `twofa_recovery_codes` | auth lifecycle tables |
-| `ws_connections` / `active_sessions` / `activity_log` | realtime and audit tables |
+#### 👤 Identity
 
-> **Integrity note:** Trigger `trg_enforce_single_diary_type_per_owner` enforces one private and one collaborative diary per owner. Unique and check constraints enforce collaboration status/role and friend-request lifecycle.
+| Table | Key Fields | Notes |
+|:------|:-----------|:------|
+| `users` | `id` (PK), `username`, `email`, `password_hash`, `google_id`, `oauth_provider`, `is_active`, `last_seen` | Central hub — every other table has a FK pointing here. Supports both email/password and Google OAuth. `google_id` has a partial unique index (non-null only). |
+
+#### 🤝 Social
+
+| Table | Key Fields | Notes |
+|:------|:-----------|:------|
+| `friend_requests` | `id` (PK), `sender_id` (FK), `receiver_id` (FK), `status`, `message` | `status` constrained to `pending \| accepted \| declined`. UNIQUE on `(sender_id, receiver_id)` prevents duplicate requests. Self-requests blocked by CHECK. |
+| `friends` | `user_id` (FK), `friend_id` (FK) — composite PK | Bidirectional pairs — accepting a request inserts two rows (A→B and B→A) for O(1) friend lookups. |
+
+#### 📓 Content
+
+| Table | Key Fields | Notes |
+|:------|:-----------|:------|
+| `diary_entries` | `id` (PK), `owner_id` (FK), `title`, `content`, `diary_type`, `is_private` | `diary_type` constrained to `private \| collaborative`. `is_private` must align with `diary_type` (enforced by CHECK). `owner_id` is SET NULL on user deletion — diaries are preserved. |
+| `collaborators` | `id` (PK), `entry_id` (FK), `user_id` (FK), `invited_by` (FK), `role`, `status` | `role` constrained to `viewer \| editor`. `status` constrained to `pending \| accepted \| declined \| removed`. UNIQUE on `(entry_id, user_id)`. |
+
+#### 🔐 Auth & Security
+
+| Table | Key Fields | Notes |
+|:------|:-----------|:------|
+| `oauth_tokens` | `id` (PK), `user_id` (FK), `provider`, `access_token`, `refresh_token`, `expires_at` | UNIQUE on `(user_id, provider)` — one token set per provider per user. CASCADE deleted with user. |
+| `oauth_states` | `state` (PK), `provider`, `expires_at` | Short-lived CSRF protection tokens for the OAuth handshake. No FK to users — the user may not exist yet at this stage. |
+| `password_reset_tokens` | `token` (PK), `user_id` (FK), `expires_at` | Persisted across server restarts. CASCADE deleted with user. |
+| `twofa_recovery_codes` | `id` (PK), `user_id` (FK), `code_hash`, `used_at` | Hashed codes, never deleted — `used_at` is set on use for audit purposes. Partial index on `used_at IS NULL` for fast unused-code lookups. |
+
+#### ⚡ Real-time & Audit
+
+| Table | Key Fields | Notes |
+|:------|:-----------|:------|
+| `ws_connections` | `user_id` (PK), `is_online`, `last_seen` | One row per user. Updated on WebSocket connect/disconnect. |
+| `active_sessions` | `entry_id` (FK) + `user_id` (FK) — composite PK, `status`, `last_seen` | Tracks who is currently viewing or editing a specific diary entry (e.g. for live cursors and co-editor presence). |
+| `notifications` | `id` (PK), `recipient_id` (FK), `sender_id` (FK), `type`, `entity_type`, `entity_id`, `is_read`, `is_archived`, `metadata` (JSONB) | Persisted so offline users receive notifications on return. Recipient CASCADE deleted with user; sender SET NULL. |
+| `activity_log` | `id` (serial PK), `user_id`, `action`, `entity_type`, `entity_id`, `metadata` (JSONB) | **No FK constraints — intentional.** Log entries survive deletion of users or entities for compliance and audit purposes. |
+
+### Deletion Cascade Summary
+
+| Deleted record | Cascade behaviour |
+|:---------------|:------------------|
+| `users` row | **CASCADE DELETE** → `friend_requests`, `friends`, `collaborators`, `oauth_tokens`, `ws_connections`, `active_sessions`, `twofa_recovery_codes`, `password_reset_tokens`, `notifications` (as recipient) |
+| `users` row | **SET NULL** → `diary_entries.owner_id`, `notifications.sender_id` |
+| `diary_entries` row | **CASCADE DELETE** → `collaborators`, `active_sessions` |
+
+### Integrity Constraints
+
+> **Trigger** `trg_enforce_single_diary_type_per_owner` — fires on INSERT/UPDATE of `diary_entries`. Prevents any owner from having more than one `private` diary or more than one `collaborative` diary.
+
+> **CHECK** `diary_entries_privacy_alignment_check` — ensures `diary_type = 'private'` ↔ `is_private = TRUE` and `diary_type = 'collaborative'` ↔ `is_private = FALSE` are always in sync.
+
+> **CHECK** `friend_requests_status_check` — restricts `status` to `pending | accepted | declined`.
+
+> **CHECK** `collaborators_role_check` / `collaborators_status_check` — restricts `role` to `viewer | editor` and `status` to `pending | accepted | declined | removed`.
 
 ---
+
 
 ## ✅ Features
 
