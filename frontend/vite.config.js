@@ -22,6 +22,15 @@ const wafHost = process.env.VITE_WAF_HOST || devHost;
 const wafPort = process.env.VITE_WAF_PORT || '8081';
 const wafProtocol = process.env.VITE_WAF_PROTOCOL || 'https';
 const wafTarget = `${wafProtocol}://${wafHost}:${wafPort}`;
+const useCustomCert = String(process.env.VITE_USE_LOCAL_CERT || '')
+  .trim()
+  .toLowerCase() === 'true';
+const httpsConfig = useCustomCert && hasLocalCert
+  ? {
+      cert: fs.readFileSync(certFile),
+      key: fs.readFileSync(keyFile),
+    }
+  : true;
 
 export default defineConfig({
   plugins: [react()],
@@ -29,12 +38,7 @@ export default defineConfig({
     host: devHost,
     port: 5173,
     strictPort: true,
-    https: hasLocalCert
-      ? {
-          cert: fs.readFileSync(certFile),
-          key: fs.readFileSync(keyFile),
-        }
-      : undefined,
+    https: httpsConfig,
     proxy: {
       '/api': {
         target: wafTarget,

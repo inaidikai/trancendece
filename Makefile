@@ -101,7 +101,7 @@ dev:
 		echo "Port 5173 already in use; skipping frontend dev server."; \
 	else \
 		echo "Running frontend dev server..."; \
-		cd $(FRONTEND_DIR) && npm run dev; \
+		cd $(FRONTEND_DIR) && VITE_DEV_HOST=localhost VITE_USE_LOCAL_CERT=false npm run dev; \
 	fi
 
 fclean: down
