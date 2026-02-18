@@ -993,7 +993,7 @@ export default function World() {
     );
     ambient.preload = "auto";
     ambient.loop = true;
-    ambient.volume = 0.35;
+    ambient.volume = 0.9;
     // Try audible autoplay first. If blocked by browser policy,
     // fall back to muted playback and unmute on first interaction.
     ambient.muted = false;

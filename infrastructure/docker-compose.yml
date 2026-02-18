@@ -98,8 +98,6 @@ services:
       - VAULT_KV_PATHS=kv/data/app
       - VAULT_OVERRIDE=true
       - VAULT_TOKEN_FILE=/vault/shared/app-token
-    ports:
-      - "8080:8080"
     volumes:
       - ./runtime/app-token:/vault/shared/app-token:ro
     networks:

@@ -7,7 +7,7 @@ CERT_DIR := infrastructure/certs
 CERT_KEY := $(CERT_DIR)/quillow.local.key
 CERT_CRT := $(CERT_DIR)/quillow.local.crt
 CERT_CONF := $(CERT_DIR)/openssl-local.cnf
-NPM_DIRS := . frontend infrastructure backend/auth-service backend/user-service backend/diary-service backend/realtime-service backend/api-gateway
+NPM_DIRS := . frontend infrastructure backend/auth-service backend/diary-service backend/realtime-service backend/api-gateway
 
 .PHONY: all help make-start check-tools npm-self-update npm-install up down vault-bootstrap-prod vault-seed logs-clean logs-clean-follow dev fclean certs
 
