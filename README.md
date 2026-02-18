@@ -139,8 +139,7 @@ erDiagram
 | Two-factor authentication | 2FA enable/verify/disable, resend, recovery code regeneration | `fkuruthl`, `inkahar` |
 | Password recovery | Forgot/reset password flows with token lifecycle | `fkuruthl`, `aymohamm` |
 | Profile management | User profile update and avatar upload | `fkuruthl`, `aymohamm` |
-| Friends system REST API | Complete friend request CRUD with online status integration | `smuneer`, `aymohamm` |
-| Diary entries REST API | Full CRUD with access control, privacy settings, and sharing | `smuneer`, `aymohamm` |
+
 | Collaboration system REST API | Invite/accept/decline/permissions management with role-based access | `smuneer`, `inkahar`, `aymohamm` |
 | Notifications REST API | Pagination, unread count, mark as read, real-time delivery | `smuneer`, `inkahar`, `aymohamm` |
 | Dashboard statistics | Aggregated stats for friends, entries, notifications, invites | `smuneer`, `inkahar` |
@@ -164,7 +163,6 @@ erDiagram
 |:---|:---|
 | **Framework (Major, 2pts)** | React + Fastify/Express are industry-standard for scalable web applications with strong ecosystem support and active community |
 | **WebSockets (Major, 2pts)** | Real-time collaboration and notifications are core to the diary app's value; Socket.IO provides proven WebSocket abstraction with fallback support |
-| **User-to-User Interaction (Major, 2pts)** | Friend system and collaborative diary editing require robust messaging; essential feature for multi-user platform |
 | **Notification System (Minor, 1pt)** | Crucial for user engagement in real-time collaborative features; paginated API + WebSocket delivery provide both persistence and instant updates |
 | **Real-time Collaboration (Minor, 1pt)** | Distinguishes the product by enabling live co-authoring and presence awareness; implemented via Socket.IO rooms and permission guards |
 | **Standard Auth (Major, 2pts)** | JWT + password-based authentication is industry standard and baseline for any multi-user SaaS |
@@ -381,7 +379,6 @@ WAF (Socket.IO)  →  realtime-service
 <br>
 
 - **Friends management:** Send/accept/decline friend requests, online status integration, bidirectional friendship creation, real-time notifications on all friendship actions
-- **Diary entries CRUD:** Create/read/update/delete with privacy controls, access control enforcement, sharing management, collaborator count aggregation
 - **Collaboration system:** Role-based permissions (viewer/editor), invite/accept/decline flows, collaborator management, permission updates, online status for active collaborators, comprehensive access control
 - **Notifications management:** Pagination, unread count, mark as read, mark all as read, delete notifications
 - **Dashboard statistics:** Aggregated counts for friends, online friends, notifications, entries, pending invites
