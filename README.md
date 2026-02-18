@@ -454,6 +454,7 @@ cd frontend && npm run dev
 
 | Service | URL |
 |:---|:---|
+| GitHub Repository | [github.com/inaidikai/trancendece](https://github.com/inaidikai/trancendece/tree/main) |
 | Frontend | `https://localhost:5173` |
 | API Gateway | `http://localhost:8080` |
 | WAF HTTPS entry | `https://localhost:8081` |

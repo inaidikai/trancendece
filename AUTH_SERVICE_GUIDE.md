@@ -13,7 +13,6 @@ Services:
 - **auth-service**: Registration/login, JWT, Google OAuth, 2FA, password reset, user profile, friendships.
 - **diary-service**: Diary entries, collaborators, notifications, dashboard.
 - **realtime-service**: WebSocket events (presence, notifications, collaboration).
-- **user-service**: Minimal placeholder service.
 - **shared**: Vault integration utilities.
 
 ---

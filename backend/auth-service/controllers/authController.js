@@ -472,7 +472,6 @@ const googleAuthCallback = async (req, res) => {
     if (!email) {
       return res.status(400).json({ error: 'Unable to retrieve email from Google' });
     }
-
     // Step 3: Check if user exists in our database
     const query = 'SELECT * FROM users WHERE email = $1 OR google_id = $2';
     const user = await db.get(query, [email.toLowerCase(), googleId]);
