@@ -282,6 +282,24 @@ WAF (Socket.IO)  →  realtime-service
 - Led frontend validation and usability testing (desktop/tablet/mobile), including auth edge cases and editor interaction checks
 - **Challenge:** Preserving UX consistency while supporting both standard and collaborative diary modes
 
+<br>
+
+| Area | Responsibility (short) |
+|:---|:---|
+| Product UX ownership | Defined user journeys and interaction flow across auth, dashboard, home/read/edit diary modes |
+| Auth frontend UX | Built/iterated login, signup, forgot/reset password, 2FA verify, create profile screens with validation and error states |
+| Home + Flipbook flow | Owned homepage structure and flow into read/edit diary experiences |
+| Editor tool UX | Designed/refined select/text/mic/upload/sticker/paper behaviors with clear active-state feedback |
+| Top + Bottom bars | Implemented and tuned top formatting bar + bottom dock UI and interactions |
+| Mic interaction UX | Defined mic armed/listening/stop states, tooltip behavior, and collaborator restrictions |
+| Upload + Sticker UX | Built upload options (normal/framed), sticker modal/filter behavior, and related popovers |
+| Collaboration UX (frontend) | Implemented invite/collaborator modal flows, role-based restrictions, and friend-facing UI interactions |
+| Dashboard overlays | Implemented friends/notifications/profile popups over dashboard/world UI |
+| Design system consistency | Maintained consistent typography, spacing, radius, colors, and component behavior |
+| Responsive QA | Tested and adjusted desktop/tablet/mobile behavior across auth, dashboard, and editor |
+| Frontend-backend handoff | Aligned frontend states, validation, and user-facing errors with backend API contracts |
+
+
 </details>
 
 ---
