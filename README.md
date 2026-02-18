@@ -500,8 +500,10 @@ WAF (Socket.IO)  →  realtime-service
   - Created duplicate user detection with specific error differentiation (email vs username)
   - Integrated email service for 2FA and password reset notifications
   - Coordinated auth service integration with gateway, Vault, and frontend flows
+</details>
 
 ---
+
 
 <details>
 <summary><strong>⚙️ smuneer</strong> — Backend Developer (Diary & Realtime Services)</summary>
