@@ -38,8 +38,8 @@ Quillow is a secure, social, and collaborative diary platform. Users can registe
 | Login | Role | Responsibilities |
 |:---|:---|:---|
 | `inkahar` | Backend Lead · DevOps/Security | Service orchestration, API gateway, routing architecture, WAF/Vault hardening, 3D environment integration direction |
-| `aymohamm` | PO · Frontend Lead · Full-stack | UX/UI flows, core diary interaction screens, auth UX, user-facing validation and product alignment |
-| `fkuruthl` | PM · Tech Lead (Auth-Service) · Full-stack | Project management, sprint planning, auth-service architecture and implementation, security hardening, documentation |
+| `aymohamm` | PO · Frontend Lead | UX/UI flows, core diary interaction screens, auth UX, user-facing validation and product alignment |
+| `fkuruthl` | PM · Tech Lead (Auth-Service) | Project management, sprint planning, auth-service architecture and implementation, security hardening, documentation |
 | `smuneer` | Backend Developer (Diary & Realtime) | diary-service REST API, collaboration system with role-based permissions, real-time notification integration, WebSocket trigger endpoint, socket authentication |
 
 ---
@@ -186,9 +186,9 @@ erDiagram
 | Web | Real-time collaborative features | Minor | 1 | `smuneer`, `inkahar`, `aymohamm` | Socket.IO rooms for diary sessions, role-based permission checks, live presence for active editors |
 | User Management | Standard auth and user management | Major | 2 | `fkuruthl`, `inkahar`, `aymohamm` | JWT token issuance, Bcrypt password hashing, user profile endpoints, session management |
 | User Management | Remote authentication (OAuth 2.0) | Minor | 1 | `fkuruthl`, `aymohamm` | Google OAuth flow integration, account linking, token refresh lifecycle |
-| User Management | 2FA system | Minor | 1 | `fkuruthl`, `inkahar` | Email-based OTP codes, recovery codes, 2-minute expiry, resend functionality |
+| User Management | 2FA system | Minor | 1 | `fkuruthl`, | Email-based OTP codes, recovery codes, 2-minute expiry, resend functionality |
 | Artificial Intelligence | Voice/speech integration | Minor | 1 | `aymohamm` | Browser Speech-to-Text API integration for voice diary entries in 3D world |
-| Cybersecurity | WAF/ModSecurity + HashiCorp Vault | Major | 2 | `inkahar`, `fkuruthl` | OWASP ModSecurity CRS at Nginx, route-level rule tuning, Vault server-mode secret injection |
+| Cybersecurity | WAF/ModSecurity + HashiCorp Vault | Major | 2 | `inkahar` | OWASP ModSecurity CRS at Nginx, route-level rule tuning, Vault server-mode secret injection |
 | Gaming and UX | Advanced 3D graphics (Three.js) | Major | 2 | `aymohamm`, `inkahar` | Three.js scene with @react-three/fiber, physics via @react-three/rapier, interactive diary access portal |
 | DevOps | Backend as microservices | Major | 2 | `inkahar` | Four independent services (auth/diary/realtime/gateway), Docker Compose orchestration, service discovery via internal DNS |
 
@@ -274,7 +274,7 @@ WAF (Socket.IO)  →  realtime-service
 ---
 
 <details>
-<summary><strong>🎨 aymohamm</strong> — PO · Frontend Lead · Full-stack Developer</summary>
+<summary><strong>🎨 aymohamm</strong> — PO · Frontend Lead </summary>
 
 <br>
 
@@ -289,7 +289,7 @@ WAF (Socket.IO)  →  realtime-service
 ---
 
 <details>
-<summary><strong>🔐 fkuruthl</strong> — PM · Tech Lead (Auth-Service) · Full-stack Developer</summary>
+<summary><strong>🔐 fkuruthl</strong> — PM · Tech Lead (Auth-Service) </summary>
 
 <br>
 
@@ -372,20 +372,6 @@ WAF (Socket.IO)  →  realtime-service
   - Created duplicate user detection with specific error differentiation (email vs username)
   - Integrated email service for 2FA and password reset notifications
   - Coordinated auth service integration with gateway, Vault, and frontend flows
-
-#### ⚡ Engineering Challenges Solved
-
-> **Rate limiting without persistence** — Needed to prevent brute force attacks during development without adding Redis. Solution: In-memory Map-based tracking with automatic window cleanup, sufficient for local/dev environments and easily swappable for Redis in production.
-
-> **2FA expiry precision** — 2FA codes must balance usability (enough time to receive email) with security (minimize exposure). Solution: 2-minute window with millisecond-precision timestamp comparison.
-
-> **Duplicate handling** — Database UNIQUE constraints return cryptic error codes. Solution: Parse constraint error messages to return specific 409 responses (email vs username conflicts) and display user-friendly messages.
-
-- Prevented timing attacks with bcryptjs constant-time comparison
-- Unified validation logic between frontend and backend (DRY principle)
-- Maintained backward compatibility while hardening security
-
-</details>
 
 ---
 
