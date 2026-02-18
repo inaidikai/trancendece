@@ -132,7 +132,6 @@ const schemas = {
   }
 };
 
-// Middleware that actually validates
 const validate = (schema) => {
   return (req, res, next) => {
     if (!schema || !schema.validate) {

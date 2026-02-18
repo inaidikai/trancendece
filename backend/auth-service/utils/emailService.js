@@ -110,19 +110,6 @@ Quillow Team`,
   }
 };
 
-// Test email configuration
-const testEmailConfig = async () => {
-  try {
-    const transporter = await getTransporter();
-    await transporter.verify();
-    console.log('✓ Email service configured correctly');
-    return true;
-  } catch (error) {
-    console.error('✗ Email service configuration error:', error);
-    return false;
-  }
-};
-
 // Send OAuth verification code email
 const sendOAuthCodeEmail = async (email, code, userName) => {
   try {

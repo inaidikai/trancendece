@@ -23,8 +23,6 @@ const updateProfile = async (req, res) => {
   const userId = req.user.userId;
   const { full_name, bio, avatar } = req.body;
 
-  // Validate avatar size if provided (base64 payload)
-  // Max 5 MB - base64 strings are ~33% larger, so limit base64 to ~3.75 MB
   if (avatar && avatar.length > 5242880) {
     return res.status(413).json({ error: 'Avatar too large. Max 5 MB.' });
   }

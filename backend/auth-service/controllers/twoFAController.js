@@ -3,7 +3,7 @@ const { comparePassword, generateId, hashPassword } = require('../utils/auth');
 const crypto = require('crypto');
 const { sendTwoFAEmail } = require('../utils/emailService');
 
-const RECOVERY_CODE_COUNT = Number(process.env.RECOVERY_CODE_COUNT || 8);
+const RECOVERY_CODE_COUNT = 8;
 
 const generateRecoveryCodes = async (userId, count = RECOVERY_CODE_COUNT) => {
   const codes = [];

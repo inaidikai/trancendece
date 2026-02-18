@@ -156,7 +156,7 @@ erDiagram
 
 ## 🏆 Modules
 
-> **Scoring:** Major = 2 pts · Minor = 1 pt · **Total: 19 pts**
+> **Scoring:** Major = 2 pts · Minor = 1 pt · **Total: 17 pts**
 
 ### Module Selection Rationale
 
